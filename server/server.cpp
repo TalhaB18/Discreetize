@@ -66,6 +66,7 @@ struct MeshJob {
     VolumeMesh  vol_mesh;
     PrismMesh   bl_mesh;
     double      mesh_size = 0.1;
+    MeshEngine::QualityReport quality{};
     std::mutex  mu;
 };
 
@@ -806,12 +807,13 @@ static std::string handle_generate_mesh(const HttpRequest& req) {
             VolumeMesh vol = mesher.generateTetCore(bl, mesh_size);
             set_progress("Checking quality", 0.95);
 
-            (void)mesher.checkQuality(vol);
+            auto quality = mesher.checkQuality(vol);
 
             {
                 std::lock_guard<std::mutex> lk(job->mu);
                 job->vol_mesh = std::move(vol);
                 job->bl_mesh  = std::move(bl);
+                job->quality  = quality;
                 job->status   = "complete";
                 job->message  = "Mesh generation complete";
                 job->progress = 1.0;
@@ -1013,6 +1015,19 @@ static std::string handle_mesh_data(const std::string& mesh_id) {
         << ",\"num_surface_tris\":" << std::min(total_surface_tris, 20000)
         << ",\"num_prisms\":"     << vol.prisms.size()
         << "}";
+
+    // --- quality ---
+    {
+        const auto& q = job->quality;
+        out << ",\"quality\":{"
+            << "\"max_skewness\":"      << q.max_skewness
+            << ",\"avg_skewness\":"     << q.avg_skewness
+            << ",\"max_aspect_ratio\":" << q.max_aspect_ratio
+            << ",\"avg_aspect_ratio\":" << q.avg_aspect_ratio
+            << ",\"min_orthogonality\":" << q.min_orthogonality
+            << ",\"bad_cells\":"        << q.bad_cells
+            << "}";
+    }
 
     out << "}";
     return ok_json(out.str());

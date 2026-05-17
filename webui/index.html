@@ -3481,10 +3481,23 @@ function renderMesh(data) {
     ['Diag.', b.diagonal.toFixed(4)+' m'],
   ]);
 
+  const q = data.quality || {};
+  const skewColor  = q.max_skewness  > 0.85 ? '#f05050' : q.max_skewness  > 0.5 ? '#f0a030' : '#50c87a';
+  const arColor    = q.max_aspect_ratio > 20 ? '#f05050' : q.max_aspect_ratio > 5 ? '#f0a030' : '#50c87a';
+  const orthColor  = q.min_orthogonality < 45 ? '#f05050' : q.min_orthogonality < 70 ? '#f0a030' : '#50c87a';
+  const badColor   = q.bad_cells > 0 ? '#f05050' : '#50c87a';
   document.getElementById('statgrid').innerHTML = [
-    [s.num_nodes,'Nodes'],[s.num_tets,'Tets'],
-    [s.num_prisms||0,'Prisms'],[s.num_surface_tris,'Surf. tris'],
-  ].map(([v,l])=>`<div class="sc"><div class="sn">${Number(v).toLocaleString()}</div><div class="sl">${l}</div></div>`).join('');
+    [s.num_nodes,'Nodes',null],[s.num_tets,'Tets',null],
+    [s.num_prisms||0,'Prisms',null],[s.num_surface_tris,'Surf. tris',null],
+  ].map(([v,l])=>`<div class="sc"><div class="sn">${Number(v).toLocaleString()}</div><div class="sl">${l}</div></div>`).join('')
+  + (q.max_skewness != null ? `
+    <div class="sc" style="grid-column:1/-1;border-top:1px solid var(--border2);margin-top:4px;padding-top:4px;"></div>
+    <div class="sc"><div class="sn" style="color:${skewColor}">${q.max_skewness.toFixed(3)}</div><div class="sl">Max Skewness</div></div>
+    <div class="sc"><div class="sn" style="color:${skewColor}">${q.avg_skewness.toFixed(3)}</div><div class="sl">Avg Skewness</div></div>
+    <div class="sc"><div class="sn" style="color:${arColor}">${q.max_aspect_ratio.toFixed(1)}</div><div class="sl">Max Aspect Ratio</div></div>
+    <div class="sc"><div class="sn" style="color:${orthColor}">${q.min_orthogonality.toFixed(1)}°</div><div class="sl">Min Orthogonality</div></div>
+    <div class="sc"><div class="sn" style="color:${badColor}">${q.bad_cells}</div><div class="sl">Bad Cells (>0.85)</div></div>
+  ` : '');
   document.getElementById('sec-stats').style.display = '';
   document.getElementById('sec-vis').style.display   = '';
 
