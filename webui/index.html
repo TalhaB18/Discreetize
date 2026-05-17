@@ -1229,6 +1229,63 @@ body.sim-open #timeline-panel { display: none; }
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { opacity: 1; }
 
+/* ── Settings Tab ── */
+#theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  padding: 2px 0 6px;
+}
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 2px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.theme-swatch:hover { border-color: var(--accent-l); background: var(--panel3); }
+.theme-swatch.active { border-color: var(--accent-l); box-shadow: 0 0 0 1px var(--accent-l); }
+.sw-preview {
+  width: 100%;
+  height: 22px;
+  border-radius: 3px;
+  display: block;
+}
+.sw-name {
+  font-size: 9px;
+  color: var(--muted);
+  text-align: center;
+}
+.theme-swatch.active .sw-name { color: var(--accent-l); font-weight: 700; }
+.bl-select {
+  background: var(--panel3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 10px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+#fps-counter {
+  position: fixed;
+  top: calc(var(--topbar-h) + 4px);
+  left: calc(var(--ltb-w) + 6px);
+  background: rgba(0,0,0,.6);
+  color: var(--accent2);
+  font-size: 10px;
+  font-family: monospace;
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+}
+
 /* ── Boolean resolution row ── */
 .bool-res-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
 #bool-res { flex: 1; }
@@ -2095,6 +2152,150 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
           </div>
         </div>
 
+        <!-- ══ SETTINGS TAB ══ -->
+        <div id="tab-settings" class="rp-tab-pane">
+
+          <div class="bl-sec-hdr open" data-target="theme-body">
+            <span class="sec-arrow">▶</span> Theme
+          </div>
+          <div class="bl-sec-body open" id="theme-body">
+            <div id="theme-grid">
+              <button class="theme-swatch active" data-theme="default" title="Violet Dark">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#19171f,#6b58cc)"></span>
+                <span class="sw-name">Violet</span>
+              </button>
+              <button class="theme-swatch" data-theme="midnight" title="Midnight Blue">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#07090e,#3b82f6)"></span>
+                <span class="sw-name">Midnight</span>
+              </button>
+              <button class="theme-swatch" data-theme="neon" title="Neon Green">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#050d07,#00ff88)"></span>
+                <span class="sw-name">Neon</span>
+              </button>
+              <button class="theme-swatch" data-theme="ember" title="Ember Orange">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#130800,#f97316)"></span>
+                <span class="sw-name">Ember</span>
+              </button>
+              <button class="theme-swatch" data-theme="arctic" title="Arctic">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#0a1628,#06b6d4)"></span>
+                <span class="sw-name">Arctic</span>
+              </button>
+              <button class="theme-swatch" data-theme="rose" title="Rose">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#1a0814,#ec4899)"></span>
+                <span class="sw-name">Rose</span>
+              </button>
+              <button class="theme-swatch" data-theme="light" title="Light">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#eeecf8,#5b4ec4)"></span>
+                <span class="sw-name">Light</span>
+              </button>
+              <button class="theme-swatch" data-theme="obsidian" title="Obsidian">
+                <span class="sw-preview" style="background:linear-gradient(135deg,#0a0a0a,#888)"></span>
+                <span class="sw-name">Obsidian</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="bl-sec-hdr open" data-target="viewport-body">
+            <span class="sec-arrow">▶</span> Viewport
+          </div>
+          <div class="bl-sec-body open" id="viewport-body">
+            <div class="bl-row">
+              <span class="bl-label">Background</span>
+              <input type="color" id="set-bg-color" value="#0d1117" style="width:36px;height:20px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:none;">
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Grid opacity</span>
+              <input type="range" id="set-grid-opacity" min="0" max="1" step="0.05" value="0.6" style="flex:1;">
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Grid size</span>
+              <select id="set-grid-size" class="bl-select">
+                <option value="5">5 m</option>
+                <option value="10" selected>10 m</option>
+                <option value="20">20 m</option>
+                <option value="50">50 m</option>
+              </select>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Camera FOV</span>
+              <input type="range" id="set-fov" min="20" max="90" step="1" value="45" style="flex:1;">
+              <span id="set-fov-val" style="min-width:26px;text-align:right;font-size:10px;color:var(--text2);">45°</span>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Damping</span>
+              <input type="range" id="set-damping" min="0.01" max="0.3" step="0.01" value="0.08" style="flex:1;">
+            </div>
+          </div>
+
+          <div class="bl-sec-hdr open" data-target="render-body">
+            <span class="sec-arrow">▶</span> Render Quality
+          </div>
+          <div class="bl-sec-body open" id="render-body">
+            <div class="bl-row">
+              <span class="bl-label">Pixel ratio</span>
+              <select id="set-dpr" class="bl-select">
+                <option value="1">1× (fast)</option>
+                <option value="1.5">1.5×</option>
+                <option value="2" selected>2× (crisp)</option>
+              </select>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Antialias</span>
+              <span style="font-size:10px;color:var(--muted);">On (restart to change)</span>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Ambient light</span>
+              <input type="range" id="set-amb" min="0" max="1" step="0.05" value="0.55" style="flex:1;">
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Sun light</span>
+              <input type="range" id="set-sun" min="0" max="2" step="0.05" value="0.9" style="flex:1;">
+            </div>
+          </div>
+
+          <div class="bl-sec-hdr open" data-target="ui-body">
+            <span class="sec-arrow">▶</span> Interface
+          </div>
+          <div class="bl-sec-body open" id="ui-body">
+            <div class="bl-row">
+              <span class="bl-label">Font size</span>
+              <select id="set-fontsize" class="bl-select">
+                <option value="11">Small (11px)</option>
+                <option value="12" selected>Normal (12px)</option>
+                <option value="13">Large (13px)</option>
+                <option value="14">XL (14px)</option>
+              </select>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Panel width</span>
+              <input type="range" id="set-rp-width" min="220" max="400" step="10" value="280" style="flex:1;">
+              <span id="set-rp-width-val" style="min-width:30px;text-align:right;font-size:10px;color:var(--text2);">280</span>
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Accent color</span>
+              <input type="color" id="set-accent-color" value="#6b58cc" style="width:36px;height:20px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:none;">
+            </div>
+            <div class="bl-row" style="margin-top:4px;">
+              <span class="bl-label">Show FPS</span>
+              <input type="checkbox" id="set-show-fps">
+            </div>
+          </div>
+
+          <div class="bl-sec-hdr open" data-target="about-body">
+            <span class="sec-arrow">▶</span> About
+          </div>
+          <div class="bl-sec-body open" id="about-body">
+            <div style="font-size:10px;color:var(--muted);line-height:1.7;">
+              <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:4px;">Discreetize CFD Mesh</div>
+              <div>C++ engine · Three.js viewer</div>
+              <div>Boolean subtract · BL inflation</div>
+              <div>Bifilar solid · Tet meshing</div>
+              <div style="margin-top:6px;color:var(--accent-l);">discreetize-production.up.railway.app</div>
+            </div>
+          </div>
+
+        </div><!-- #tab-settings -->
+
       </div><!-- #rp-inner -->
 
       <!-- RP Edge Strip -->
@@ -2137,6 +2338,13 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
             <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
           </svg>
           <span class="rp-tab-label">Tool</span>
+        </button>
+        <button class="rp-tab-btn" data-tab="settings" draggable="true" title="Settings">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+          <span class="rp-tab-label">Settings</span>
         </button>
       </div>
     </div><!-- #right-panel -->
@@ -2337,6 +2545,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
 
 <!-- Toast -->
 <div id="toast" class="toast"></div>
+<div id="fps-counter">-- FPS</div>
 
 <!-- Status bar -->
 
@@ -2536,11 +2745,21 @@ scene.add(grid);
 let axes = new THREE.AxesHelper(0.5);
 scene.add(axes);
 
+// Expose globals for Settings tab (non-module script)
+window.THREE = THREE;
+window._renderer = renderer;
+window._scene = scene;
+window._camera = camera;
+window._amb = amb;
+window._sun = sun;
+window._grid = grid;
+
 // ─── Controls ────────────────────────────────────────────────
 const orbit = new OrbitControls(camera, canvas);
 orbit.enableDamping = true;
 orbit.dampingFactor = 0.08;
 orbit.screenSpacePanning = true;
+window._orbit = orbit;
 
 const xform = new TransformControls(camera, canvas);
 xform.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; });
@@ -6113,6 +6332,201 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
   drawObstacles();
 })();
 
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// SETTINGS TAB — Themes, Viewport, Render, Interface
+// ═══════════════════════════════════════════════════
+(function() {
+
+  // ── Theme definitions ──────────────────────────────
+  const THEMES = {
+    default: {
+      '--bg':'#19171f','--panel':'#242231','--panel2':'#1e1c2b','--panel3':'#2e2b40',
+      '--header':'#141320','--border':'#38344e','--border2':'#28253a',
+      '--accent':'#6b58cc','--accent-l':'#9080f0','--accent-glow':'rgba(107,88,204,.25)',
+      '--accent2':'#00c8a0','--neon':'#4dffcc','--text':'#ccccdc','--text2':'#e8e4ff',
+      '--muted':'#7a7688','--muted2':'#52504e','--warn':'#f0a030','--danger':'#e05050',
+      '--success':'#40b870', light: false,
+    },
+    midnight: {
+      '--bg':'#07090e','--panel':'#0d1219','--panel2':'#111820','--panel3':'#1a2233',
+      '--header':'#080c12','--border':'#1c2433','--border2':'#1e2a3a',
+      '--accent':'#3b82f6','--accent-l':'#60a5fa','--accent-glow':'rgba(59,130,246,.2)',
+      '--accent2':'#10b981','--neon':'#34d399','--text':'#e2e8f0','--text2':'#f1f5f9',
+      '--muted':'#64748b','--muted2':'#475569','--warn':'#f59e0b','--danger':'#ef4444',
+      '--success':'#22c55e', light: false,
+    },
+    neon: {
+      '--bg':'#040d06','--panel':'#071009','--panel2':'#091408','--panel3':'#0d1e0f',
+      '--header':'#030b05','--border':'#0f2913','--border2':'#0a1e0d',
+      '--accent':'#00c853','--accent-l':'#00ff88','--accent-glow':'rgba(0,200,83,.2)',
+      '--accent2':'#69ff47','--neon':'#b9ff46','--text':'#c8ffd0','--text2':'#e8fff0',
+      '--muted':'#4a8055','--muted2':'#2e5235','--warn':'#ffd600','--danger':'#ff3d00',
+      '--success':'#00e676', light: false,
+    },
+    ember: {
+      '--bg':'#110600','--panel':'#1a0d04','--panel2':'#160b03','--panel3':'#241208',
+      '--header':'#0d0400','--border':'#3d1a08','--border2':'#2a1005',
+      '--accent':'#f97316','--accent-l':'#fb923c','--accent-glow':'rgba(249,115,22,.2)',
+      '--accent2':'#facc15','--neon':'#fde68a','--text':'#fed7aa','--text2':'#fff7ed',
+      '--muted':'#92400e','--muted2':'#78350f','--warn':'#eab308','--danger':'#dc2626',
+      '--success':'#16a34a', light: false,
+    },
+    arctic: {
+      '--bg':'#080f1a','--panel':'#0e1825','--panel2':'#0b1420','--panel3':'#152030',
+      '--header':'#060c16','--border':'#1a2e44','--border2':'#132336',
+      '--accent':'#06b6d4','--accent-l':'#22d3ee','--accent-glow':'rgba(6,182,212,.2)',
+      '--accent2':'#818cf8','--neon':'#a5f3fc','--text':'#cffafe','--text2':'#e0f2fe',
+      '--muted':'#164e63','--muted2':'#0e3a4a','--warn':'#f59e0b','--danger':'#f43f5e',
+      '--success':'#2dd4bf', light: false,
+    },
+    rose: {
+      '--bg':'#120610','--panel':'#1c0a18','--panel2':'#170814','--panel3':'#26101f',
+      '--header':'#0e0410','--border':'#3d1235','--border2':'#2a0d24',
+      '--accent':'#ec4899','--accent-l':'#f472b6','--accent-glow':'rgba(236,72,153,.2)',
+      '--accent2':'#a78bfa','--neon':'#fce7f3','--text':'#fce7f3','--text2':'#fdf4ff',
+      '--muted':'#9d174d','--muted2':'#831843','--warn':'#f59e0b','--danger':'#ef4444',
+      '--success':'#34d399', light: false,
+    },
+    light: {
+      '--bg':'#eeecf8','--panel':'#f8f6ff','--panel2':'#f0eeff','--panel3':'#e8e4f8',
+      '--header':'#ddd8f5','--border':'#c0b8e0','--border2':'#d0c8f0',
+      '--accent':'#5b4ec4','--accent-l':'#7060d8','--accent-glow':'rgba(91,78,196,.15)',
+      '--accent2':'#008870','--neon':'#006650','--text':'#1a1828','--text2':'#0a0820',
+      '--muted':'#5a5870','--muted2':'#9890b8','--warn':'#b45309','--danger':'#dc2626',
+      '--success':'#15803d', light: true,
+    },
+    obsidian: {
+      '--bg':'#0a0a0a','--panel':'#121212','--panel2':'#0f0f0f','--panel3':'#1a1a1a',
+      '--header':'#080808','--border':'#2a2a2a','--border2':'#1e1e1e',
+      '--accent':'#888888','--accent-l':'#aaaaaa','--accent-glow':'rgba(170,170,170,.15)',
+      '--accent2':'#cccccc','--neon':'#ffffff','--text':'#bbbbbb','--text2':'#eeeeee',
+      '--muted':'#555555','--muted2':'#3a3a3a','--warn':'#d4a017','--danger':'#c0392b',
+      '--success':'#27ae60', light: false,
+    },
+  };
+
+  let currentTheme = 'default';
+
+  function applyTheme(name) {
+    const t = THEMES[name]; if (!t) return;
+    const root = document.documentElement;
+    Object.entries(t).forEach(([k, v]) => { if (k !== 'light') root.style.setProperty(k, v); });
+    document.body.classList.toggle('light', !!t.light);
+    currentTheme = name;
+    document.querySelectorAll('.theme-swatch').forEach(b => b.classList.toggle('active', b.dataset.theme === name));
+    // Update renderer clear color to match new bg
+    const bgHex = parseInt(t['--bg'].replace('#',''), 16);
+    window._renderer?.setClearColor(bgHex);
+    // Update grid colors
+    const gridC = t.light ? [0x9ba5b0, 0xc8d0d8] : [0x4a5568, 0x2d3748];
+    if (window._grid) { window._grid.material.color.setHex(gridC[0]); }
+    // Persist
+    try { localStorage.setItem('cfd-theme', name); } catch(e) {}
+  }
+
+  // Theme swatch clicks
+  document.querySelectorAll('.theme-swatch').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+  });
+
+  // Restore saved theme
+  try {
+    const saved = localStorage.getItem('cfd-theme');
+    if (saved && THEMES[saved]) applyTheme(saved);
+  } catch(e) {}
+
+  // ── Viewport settings ───────────────────────────────
+  document.getElementById('set-bg-color').addEventListener('input', function() {
+    const hex = parseInt(this.value.replace('#',''), 16);
+    window._renderer?.setClearColor(hex);
+  });
+
+  document.getElementById('set-grid-opacity').addEventListener('input', function() {
+    if (window._grid) window._grid.material.opacity = parseFloat(this.value);
+    if (window._grid) window._grid.material.transparent = true;
+    if (window._grid) window._grid.material.needsUpdate = true;
+  });
+
+  document.getElementById('set-grid-size').addEventListener('change', function() {
+    const s = parseInt(this.value);
+    if (window._scene && window._grid) {
+      window._scene.remove(window._grid);
+      window._grid.dispose?.();
+    }
+    if (window._scene && window.THREE) {
+      const g = new window.THREE.GridHelper(s, s * 3, 0x4a5568, 0x2d3748);
+      g.material.transparent = true;
+      g.material.opacity = parseFloat(document.getElementById('set-grid-opacity').value);
+      window._scene.add(g);
+      window._grid = g;
+    }
+  });
+
+  document.getElementById('set-fov').addEventListener('input', function() {
+    document.getElementById('set-fov-val').textContent = this.value + '°';
+    if (window._camera) { window._camera.fov = parseFloat(this.value); window._camera.updateProjectionMatrix(); }
+  });
+
+  document.getElementById('set-damping').addEventListener('input', function() {
+    if (window._orbit) window._orbit.dampingFactor = parseFloat(this.value);
+  });
+
+  // ── Render quality ──────────────────────────────────
+  document.getElementById('set-dpr').addEventListener('change', function() {
+    window._renderer?.setPixelRatio(parseFloat(this.value));
+  });
+
+  document.getElementById('set-amb').addEventListener('input', function() {
+    if (window._amb) window._amb.intensity = parseFloat(this.value);
+  });
+
+  document.getElementById('set-sun').addEventListener('input', function() {
+    if (window._sun) window._sun.intensity = parseFloat(this.value);
+  });
+
+  // ── Interface ───────────────────────────────────────
+  document.getElementById('set-fontsize').addEventListener('change', function() {
+    document.body.style.fontSize = this.value + 'px';
+  });
+
+  document.getElementById('set-rp-width').addEventListener('input', function() {
+    const v = this.value;
+    document.getElementById('set-rp-width-val').textContent = v;
+    document.documentElement.style.setProperty('--rp-w', v + 'px');
+  });
+
+  document.getElementById('set-accent-color').addEventListener('input', function() {
+    document.documentElement.style.setProperty('--accent', this.value);
+    // Derive a lighter shade
+    document.documentElement.style.setProperty('--accent-l', this.value);
+  });
+
+  // ── FPS counter ─────────────────────────────────────
+  let fpsOn = false, fpsFrames = 0, fpsLast = performance.now();
+  document.getElementById('set-show-fps').addEventListener('change', function() {
+    fpsOn = this.checked;
+    document.getElementById('fps-counter').style.display = fpsOn ? 'block' : 'none';
+  });
+
+  function updateFPS() {
+    if (!fpsOn) return;
+    fpsFrames++;
+    const now = performance.now();
+    if (now - fpsLast >= 500) {
+      const fps = Math.round(fpsFrames * 1000 / (now - fpsLast));
+      document.getElementById('fps-counter').textContent = fps + ' FPS';
+      fpsFrames = 0; fpsLast = now;
+    }
+    requestAnimationFrame(updateFPS);
+  }
+  document.getElementById('set-show-fps').addEventListener('change', function() {
+    if (this.checked) { fpsFrames=0; fpsLast=performance.now(); requestAnimationFrame(updateFPS); }
+  });
+
+})();
 </script>
 </body>
 </html>
