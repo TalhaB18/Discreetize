@@ -2875,8 +2875,8 @@ static std::string handle_ai_analyze(const HttpRequest& req) {
 // Body: { messages: [{role,content},...] }  (full history sent by client)
 // =============================================================================
 static std::string handle_ai_chat(const HttpRequest& req) {
-    // ── Real AI via Lovable gateway ────────────────────────────────────────────
-    const char* api_key_env = std::getenv("LOVABLE_API_KEY");
+    // ── Real AI via Google Gemini API ─────────────────────────────────────────
+    const char* api_key_env = std::getenv("GEMINI_API_KEY");
     if (api_key_env && api_key_env[0] != '\0') {
         std::string messages_raw = json_array_raw(req.body, "messages");
         static const char* SYS =
@@ -2884,17 +2884,17 @@ static std::string handle_ai_chat(const HttpRequest& req) {
             "processing, STL workflows, running simulations, mesh generation, and "
             "using the Discreetize tool. Be concise, friendly, and technical when needed.";
         std::ostringstream gw;
-        gw << "{\"model\":\"google/gemini-3-flash-preview\",\"messages\":["
+        gw << "{\"model\":\"gemini-1.5-flash\",\"messages\":["
            << "{\"role\":\"system\",\"content\":\"" << json_escape(SYS) << "\"}";
         if (messages_raw.size() > 2)
             gw << "," << messages_raw.substr(1, messages_raw.size() - 2);
         gw << "]}";
         long status = 0;
         std::string gw_resp = https_post_json(
-            "https://ai.gateway.lovable.dev/v1/chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
             api_key_env, gw.str(), &status);
         if (status == 429) return error_json(429, "Rate limit exceeded. Try again shortly.");
-        if (status == 402) return error_json(402, "AI credits exhausted.");
+        if (status == 402) return error_json(402, "AI quota exhausted.");
         if (!gw_resp.empty()) {
             // Extract content from choices[0].message.content
             std::string reply;
