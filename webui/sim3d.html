@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CFD Flow Simulation</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;overflow:hidden;transition:background .3s}
+canvas{position:fixed;inset:0;display:block}
+
+#bar{
+  position:fixed;top:0;left:0;right:0;
+  z-index:10;backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--bar-border,#ffffff14);
+  background:var(--bar-bg,rgba(4,2,16,.93));
+  transition:background .3s,border-color .3s;
+}
+#bar-row{display:flex;align-items:center;gap:5px;padding:6px 10px;flex-wrap:nowrap;overflow-x:auto}
+#bar-row h1{font-size:11px;color:var(--accent,#00e5ff);letter-spacing:.1em;font-weight:700;flex-shrink:0}
+.vsep{width:1px;height:20px;background:var(--sep,#ffffff14);margin:0 2px;flex-shrink:0}
+
+/* preset buttons */
+.pbtn{
+  padding:3px 10px;border:1px solid var(--sep2,#33335a);border-radius:3px;
+  background:var(--pbtn-bg,#0c0a1e);color:var(--pbtn-col,#778);
+  cursor:pointer;font-size:10px;transition:all .15s;flex-shrink:0;
+}
+.pbtn:hover{border-color:var(--accent,#00e5ff);color:var(--accent,#00e5ff)}
+.pbtn.act{border-color:var(--accent,#00e5ff);background:var(--pbtn-act,rgba(0,229,255,.14));
+          color:var(--accent,#00e5ff);font-weight:600}
+
+/* direction buttons */
+.dbtn{
+  padding:3px 8px;border:1px solid var(--sep2,#33335a);border-radius:3px;
+  background:var(--pbtn-bg,#0c0a1e);color:var(--pbtn-col,#667);
+  cursor:pointer;font-size:10px;transition:all .12s;flex-shrink:0;
+}
+.dbtn:hover{border-color:var(--accent,#00e5ff)66;color:#00bcd4}
+.dbtn.act{border-color:var(--accent,#00e5ff);background:var(--pbtn-act,rgba(0,229,255,.13));
+           color:var(--accent,#00e5ff);font-weight:600}
+
+.slbl{font-size:9px;color:var(--lbl,#556);display:flex;align-items:center;gap:4px;flex-shrink:0}
+.slbl input[type=range]{width:72px;accent-color:var(--accent,#00e5ff)}
+.slbl span{color:var(--lbl2,#99b);min-width:26px;font-size:9px}
+
+#run{
+  margin-left:auto;padding:5px 14px;border:1px solid var(--accent,#00e5ff);border-radius:4px;
+  background:var(--run-bg,rgba(0,229,255,.1));color:var(--accent,#00e5ff);
+  cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.05em;
+  transition:all .15s;flex-shrink:0;
+}
+#run:hover{background:var(--run-hover,rgba(0,229,255,.22))}
+#run:disabled{opacity:.35;cursor:default}
+#st{font-size:9px;color:var(--st-col,#445);padding:2px 10px 5px}
+
+#legend{
+  position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;font-size:9px;
+  color:var(--leg-col,#334);pointer-events:none;user-select:none;
+}
+#lgbar{width:130px;height:5px;border-radius:3px;
+  background:linear-gradient(to right,#0033cc,#00bb44,#ccee00,#ff8800,#ee1100)}
+#hint{position:fixed;bottom:10px;right:10px;font-size:8px;color:var(--hint-col,#2a2a3a)}
+
+/* ── Light / Engineering theme variables ── */
+body.eng{
+  --bar-bg:    rgba(245,247,252,.95);
+  --bar-border:#00000018;
+  --accent:    #0066cc;
+  --sep:       #00000014;
+  --sep2:      #ccccdd;
+  --pbtn-bg:   #eef0f8;
+  --pbtn-col:  #446;
+  --pbtn-act:  rgba(0,102,204,.12);
+  --lbl:       #557;
+  --lbl2:      #338;
+  --run-bg:    rgba(0,102,204,.1);
+  --run-hover: rgba(0,102,204,.22);
+  --st-col:    #334;
+  --leg-col:   #334;
+  --hint-col:  #aaa;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="bar">
+  <div id="bar-row">
+    <h1>⟶ CFD</h1>
+    <div class="vsep"></div>
+
+    <!-- Presets -->
+    <span style="font-size:9px;color:var(--lbl,#445)">Preset:</span>
+    <button class="pbtn act" data-preset="dark">Dark</button>
+    <button class="pbtn"     data-preset="eng">Engineering</button>
+
+    <div class="vsep"></div>
+
+    <!-- Wind direction -->
+    <span style="font-size:9px;color:var(--lbl,#445)">Wind:</span>
+    <button class="dbtn act" data-fd="1,0,0">W→E</button>
+    <button class="dbtn"     data-fd="-1,0,0">E→W</button>
+    <button class="dbtn"     data-fd="0,0,1">S→N</button>
+    <button class="dbtn"     data-fd="0,0,-1">N→S</button>
+
+    <div class="vsep"></div>
+
+    <span class="slbl">Streams
+      <input type="range" id="scount" min="80" max="500" value="300"
+             oninput="document.getElementById('scv').textContent=this.value">
+      <span id="scv">300</span>
+    </span>
+    <span class="slbl">Constriction
+      <input type="range" id="cnstr" min="0" max="100" value="0"
+             oninput="document.getElementById('cnv').textContent=this.value+'%'">
+      <span id="cnv">0%</span>
+    </span>
+    <span class="slbl">Speed
+      <input type="range" id="fspd" min="1" max="30" value="6"
+             oninput="document.getElementById('fspv').textContent=(this.value/10).toFixed(1)">
+      <span id="fspv">0.6</span>
+    </span>
+
+    <button id="run">▶ Run Simulation</button>
+  </div>
+  <div id="st">Add objects in the main window, then click ▶ Run.</div>
+</div>
+
+<div id="legend">
+  <span>Slow</span>
+  <div id="lgbar"></div>
+  <span>Fast</span>
+</div>
+<div id="hint">Drag · Scroll · Right-drag pan</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader }          from 'three/addons/loaders/STLLoader.js';
+import { LineSegments2 }      from 'three/addons/lines/LineSegments2.js';
+import { LineMaterial }       from 'three/addons/lines/LineMaterial.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+
+// ── Renderer ──────────────────────────────────────────────────────────────────
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.01, 1000);
+camera.position.set(14, 9, 14);
+
+const orbit = new OrbitControls(camera, canvas);
+orbit.enableDamping = true; orbit.dampingFactor = 0.06;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.3);
+sun.position.set(6, 14, 4); scene.add(sun);
+
+let grid = new THREE.GridHelper(100, 80);
+scene.add(grid);
+
+// ── Colormap: blue → green → yellow → orange → red ───────────────────────────
+function speedColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const stops = [
+    [0.00, 0, 0,   1  ],
+    [0.30, 0, 1,   0  ],
+    [0.55, 1, 1,   0  ],
+    [0.75, 1, 0.4, 0  ],
+    [1.00, 1, 0,   0  ],
+  ];
+  let i = 0;
+  while (i < stops.length - 2 && stops[i+1][0] <= t) i++;
+  const s0 = stops[i], s1 = stops[i+1];
+  const f  = (t - s0[0]) / (s1[0] - s0[0]);
+  return [s0[1]+f*(s1[1]-s0[1]), s0[2]+f*(s1[2]-s0[2]), s0[3]+f*(s1[3]-s0[3])];
+}
+
+// ── Shader: full dim line + slow moving bright crest ─────────────────────────
+const VERT = `
+uniform float time;
+uniform float baseAlpha;
+attribute float lineArc;
+attribute vec3  baseCol;
+varying   vec3  vCol;
+varying   float vA;
+void main(){
+  float phase = fract(lineArc - time * 0.06);
+  float wave  = pow(1.0 - phase, 6.0) * 0.85;
+  vCol = baseCol;
+  vA   = clamp(baseAlpha + wave, 0.0, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const FRAG = `
+varying vec3  vCol;
+varying float vA;
+void main(){ gl_FragColor = vec4(vCol * vA, vA); }`;
+
+const streamMat = new THREE.ShaderMaterial({
+  uniforms:     { time:{value:0}, baseAlpha:{value:0.3} },
+  vertexShader: VERT, fragmentShader: FRAG,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+});
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let sceneObjs    = [];
+let streamMesh   = null;   // thin animated lines (dark mode)
+let streamThick  = null;   // thick tube-like lines (engineering mode)
+let pressPlane   = null;   // velocity field ground haze
+let floorPlane   = null;   // solid floor (engineering mode)
+let _flowDir     = [1, 0, 0];
+let _preset      = 'dark';
+let _lastSimData = null;
+const loader     = new STLLoader();
+
+// ── Presets ───────────────────────────────────────────────────────────────────
+const PRESETS = {
+  dark: {
+    bg:        0x040210,
+    fogColor:  0x040210,
+    fogNear:   60, fogFar: 200,
+    gridC1:    0x0d0d22, gridC2: 0x0a0a1c,
+    gridVisible: true, floorVisible: false,
+    objColor:  0xaaaacc, objOpacity: 0.38, objDepthWrite: false,
+    wireColor: 0x4455bb,
+    streamBlend: THREE.AdditiveBlending,
+    streamBaseAlpha: 0.30,
+    pressureVisible: false,
+  },
+  eng: {
+    bg:        0xf4f6fb,
+    fogColor:  0xf4f6fb,
+    fogNear:   80, fogFar: 350,
+    gridC1:    0xccccdd, gridC2: 0xddddee,
+    gridVisible: false, floorVisible: true,
+    objColor:  0xe4e8f2, objOpacity: 0.90, objDepthWrite: true,
+    wireColor: 0x9999bb,
+    streamBlend: THREE.NormalBlending,
+    streamBaseAlpha: 0.80,
+    pressureVisible: true,
+  },
+};
+
+function applyPreset(name) {
+  _preset = name;
+  const P = PRESETS[name];
+  document.body.classList.toggle('eng', name === 'eng');
+  document.querySelectorAll('.pbtn').forEach(b =>
+    b.classList.toggle('act', b.dataset.preset === name));
+
+  scene.background = new THREE.Color(P.bg);
+  scene.fog = new THREE.Fog(P.fogColor, P.fogNear, P.fogFar);
+  const newGrid = new THREE.GridHelper(100, 80, P.gridC1, P.gridC2);
+  newGrid.position.y = grid.position.y;
+  newGrid.visible = P.gridVisible;
+  scene.remove(grid);
+  grid.geometry.dispose(); grid.material.dispose();
+  scene.add(newGrid);
+  grid = newGrid;
+
+  // Update object materials
+  sceneObjs.forEach(mesh => {
+    if (mesh.material) {
+      mesh.material.color.set(P.objColor);
+      mesh.material.opacity    = P.objOpacity;
+      mesh.material.depthWrite = P.objDepthWrite;
+    }
+    mesh.children.forEach(c => {
+      if (c.material) c.material.color.set(P.wireColor);
+    });
+  });
+
+  streamMat.blending   = P.streamBlend;
+  streamMat.uniforms.baseAlpha.value = P.streamBaseAlpha;
+  streamMat.needsUpdate = true;
+
+  if (streamMesh)  streamMesh.visible  = (name === 'dark');
+  if (streamThick) streamThick.visible = (name === 'eng');
+  if (pressPlane)  pressPlane.visible  = P.pressureVisible;
+  if (floorPlane)  floorPlane.visible  = P.floorVisible;
+}
+
+// ── Load scene geometry ───────────────────────────────────────────────────────
+async function loadScene() {
+  const raw = localStorage.getItem('cfd_sim_scene');
+  if (!raw) { st('Add objects in the main window, then click ▶ Run.'); return null; }
+  const data = JSON.parse(raw);
+
+  sceneObjs.forEach(m => scene.remove(m));
+  sceneObjs = [];
+
+  const base = `${location.protocol}//${location.hostname}:${location.port || 9000}`;
+  const P = PRESETS[_preset];
+
+  for (const obj of data) {
+    await new Promise(res => {
+      loader.load(`${base}/api/upload/${obj.file_id}/stl`, geo => {
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+          color: P.objColor, transparent: true,
+          opacity: P.objOpacity, side: THREE.DoubleSide, depthWrite: P.objDepthWrite,
+        }));
+        mesh.add(new THREE.LineSegments(
+          new THREE.EdgesGeometry(geo),
+          new THREE.LineBasicMaterial({ color: P.wireColor, transparent: true, opacity: 0.55 })
+        ));
+        mesh.position.fromArray(obj.pos);
+        mesh.rotation.set(...obj.rot);
+        mesh.scale.fromArray(obj.scl);
+        scene.add(mesh);
+        sceneObjs.push(mesh);
+        res();
+      }, undefined, () => res());
+    });
+  }
+
+  let groundY = 0;
+  if (sceneObjs.length) {
+    const box = new THREE.Box3();
+    sceneObjs.forEach(m => box.expandByObject(m));
+    const ctr = new THREE.Vector3(), sz = new THREE.Vector3();
+    box.getCenter(ctr); box.getSize(sz);
+    const d = sz.length() * 2.4;
+    camera.position.set(ctr.x + d*.4, ctr.y + d*.4, ctr.z + d*.4);
+    orbit.target.copy(ctr);
+    orbit.update();
+    groundY = box.min.y;
+    grid.position.y = groundY - 0.02;
+  }
+  buildFloor(groundY);
+  return data;
+}
+
+// ── Build solid floor (Engineering preset) ────────────────────────────────────
+function buildFloor(y) {
+  if (floorPlane) {
+    scene.remove(floorPlane);
+    floorPlane.geometry?.dispose(); floorPlane.material?.dispose();
+    floorPlane = null;
+  }
+  const geo = new THREE.PlaneGeometry(400, 400);
+  geo.rotateX(-Math.PI / 2);
+  floorPlane = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xeceff6 }));
+  floorPlane.position.y = y - 0.04;
+  floorPlane.visible = PRESETS[_preset].floorVisible;
+  scene.add(floorPlane);
+}
+
+// ── Build velocity field ground plane (Engineering preset) ────────────────────
+function buildPressurePlane(data, groundY) {
+  if (pressPlane) { scene.remove(pressPlane); pressPlane.geometry?.dispose(); pressPlane = null; }
+  if (!data?.lines?.length) return;
+
+  const [xmin,,zmin,xmax,,zmax] = data.domain;
+  const vmax = data.vmax || 1;
+  const W = 256, H = 256;
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const ctx = off.getContext('2d');
+
+  // Accumulate speed samples onto X-Z grid
+  const grid2 = new Float32Array(W * H);
+  const cnt   = new Int32Array(W * H);
+  for (const ln of data.lines) {
+    const n = ln.p.length / 3;
+    for (let i = 0; i < n; i++) {
+      const px = (ln.p[i*3]   - xmin) / (xmax - xmin);
+      const pz = (ln.p[i*3+2] - zmin) / (zmax - zmin);
+      const gx = Math.floor(px * W), gz = Math.floor(pz * H);
+      if (gx >= 0 && gx < W && gz >= 0 && gz < H) {
+        grid2[gz*W+gx] += ln.s[i];
+        cnt[gz*W+gx]++;
+      }
+    }
+  }
+
+  // Wide box blur for smooth haze
+  const blurred = new Float32Array(W * H);
+  const blurCnt = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0, c = 0;
+    for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+      const nx = x+dx, ny = y+dy;
+      if (nx>=0&&nx<W&&ny>=0&&ny<H&&cnt[ny*W+nx]>0) {
+        s += grid2[ny*W+nx]/cnt[ny*W+nx]; c++;
+      }
+    }
+    if (c > 0) { blurred[y*W+x] = s/c; blurCnt[y*W+x] = 1; }
+  }
+
+  // Render to canvas
+  const img = ctx.createImageData(W, H);
+  for (let i = 0; i < W*H; i++) {
+    if (!blurCnt[i]) { img.data[i*4+3] = 0; continue; }
+    const t = Math.min(blurred[i] / vmax, 1);
+    const [r,g,b] = speedColor(t);
+    img.data[i*4]   = Math.round(r*255);
+    img.data[i*4+1] = Math.round(g*255);
+    img.data[i*4+2] = Math.round(b*255);
+    img.data[i*4+3] = Math.round(255 * (0.35 + t * 0.50));
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(off);
+  const pw  = xmax - xmin, ph = zmax - zmin;
+  const geo = new THREE.PlaneGeometry(pw, ph);
+  geo.rotateX(-Math.PI / 2);
+  pressPlane = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, opacity: 0.80,
+    depthWrite: false, side: THREE.DoubleSide,
+  }));
+  pressPlane.position.set((xmin+xmax)*.5, groundY + 0.01, (zmin+zmax)*.5);
+  pressPlane.visible = PRESETS[_preset].pressureVisible;
+  scene.add(pressPlane);
+}
+
+// ── Build obstacle boxes + constriction walls ─────────────────────────────────
+function buildBoxes(constrictFrac) {
+  const raw  = localStorage.getItem('cfd_sim_scene');
+  const data = raw ? JSON.parse(raw) : [];
+  const boxes = data.filter(o => isFinite(o.bbox_cx))
+    .map(o => ({ cx:o.bbox_cx, cy:o.bbox_cy, cz:o.bbox_cz,
+                 sx:o.bbox_sx, sy:o.bbox_sy, sz:o.bbox_sz }));
+
+  if (constrictFrac > 0.02 && boxes.length) {
+    let yHi=-1e9, yLo=1e9, span=0;
+    boxes.forEach(b => { yHi=Math.max(yHi,b.cy+b.sy*.5); yLo=Math.min(yLo,b.cy-b.sy*.5); span=Math.max(span,b.sx,b.sz); });
+    const midY=( yHi+yLo)*.5, sceneH=Math.max(yHi-yLo,span);
+    const gap=sceneH*(0.75-constrictFrac*0.55), wH=sceneH*3, wW=span*8;
+    boxes.push({cx:0,cy:midY+gap*.5+wH*.5,cz:0,sx:wW,sy:wH,sz:wW});
+    boxes.push({cx:0,cy:midY-gap*.5-wH*.5,cz:0,sx:wW,sy:wH,sz:wW});
+  }
+  return boxes;
+}
+
+// ── Run simulation ─────────────────────────────────────────────────────────────
+async function runSim() {
+  const btn = document.getElementById('run');
+  btn.disabled = true;
+  const seeds  = +document.getElementById('scount').value;
+  const speed  = +document.getElementById('fspd').value / 10;
+  const constr = +document.getElementById('cnstr').value / 100;
+
+  st(`C++ computing ${seeds} streamlines [${_flowDir.join(',')}]…`);
+  try {
+    const r = await fetch('/api/sim/streamlines', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        objects:     buildBoxes(constr),
+        flow_dir:    _flowDir,
+        inlet_speed: speed,
+        seed_count:  seeds,
+        max_steps:   1200,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    _lastSimData = data;
+
+    // Ground level from loaded objects
+    let groundY = 0;
+    if (sceneObjs.length) {
+      const box = new THREE.Box3();
+      sceneObjs.forEach(m => box.expandByObject(m));
+      groundY = box.min.y;
+    }
+
+    buildStreamLines(data);
+    buildPressurePlane(data, groundY);
+    buildFloor(groundY);
+    st(`✓ ${data.lines.length} streamlines · Vmax ${data.vmax.toFixed(3)} · Constriction ${Math.round(constr*100)}%`);
+  } catch(e) { st('Error: ' + e.message); console.error(e); }
+  btn.disabled = false;
+}
+
+// ── Build streamline geometry ─────────────────────────────────────────────────
+function buildStreamLines(data) {
+  if (streamMesh)  { scene.remove(streamMesh);  streamMesh.geometry.dispose(); streamMesh = null; }
+  if (streamThick) { scene.remove(streamThick); streamThick.geometry.dispose(); streamThick.material.dispose(); streamThick = null; }
+
+  const { lines, vmax } = data;
+  if (!lines.length) return;
+
+  const posArr = [], colArr = [], arcArr = [];
+
+  for (const ln of lines) {
+    const n = ln.p.length / 3;
+    if (n < 2) continue;
+    const arcL = [0];
+    for (let i = 1; i < n; i++) {
+      const i3=i*3, m3=(i-1)*3;
+      const dx=ln.p[i3]-ln.p[m3], dy=ln.p[i3+1]-ln.p[m3+1], dz=ln.p[i3+2]-ln.p[m3+2];
+      arcL.push(arcL[i-1] + Math.sqrt(dx*dx+dy*dy+dz*dz));
+    }
+    const tot = arcL[n-1] || 1;
+    for (let i = 0; i < n-1; i++) {
+      const i3 = i*3;
+      posArr.push(ln.p[i3],ln.p[i3+1],ln.p[i3+2], ln.p[i3+3],ln.p[i3+4],ln.p[i3+5]);
+      arcArr.push(arcL[i]/tot, arcL[i+1]/tot);
+      const [r0,g0,b0] = speedColor(ln.s[i]  /vmax);
+      const [r1,g1,b1] = speedColor(ln.s[i+1]/vmax);
+      colArr.push(r0,g0,b0, r1,g1,b1);
+    }
+  }
+
+  // ── Thin animated lines — dark mode ───────────────────────────────────────
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+  geo.setAttribute('lineArc',  new THREE.Float32BufferAttribute(arcArr, 1));
+  geo.setAttribute('baseCol',  new THREE.Float32BufferAttribute(colArr, 3));
+  streamMesh = new THREE.LineSegments(geo, streamMat);
+  streamMesh.visible = (_preset === 'dark');
+  scene.add(streamMesh);
+
+  // ── Thick screen-space lines — engineering mode ────────────────────────────
+  const geoE = new LineSegmentsGeometry();
+  geoE.setPositions(new Float32Array(posArr));
+  geoE.setColors(new Float32Array(colArr));
+  const matE = new LineMaterial({
+    linewidth:    2.0,
+    vertexColors: true,
+    transparent:  true,
+    opacity:      0.88,
+    depthWrite:   false,
+    resolution:   new THREE.Vector2(innerWidth, innerHeight),
+  });
+  streamThick = new LineSegments2(geoE, matE);
+  streamThick.visible = (_preset === 'eng');
+  scene.add(streamThick);
+
+  streamMat.uniforms.time.value = 0;
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+let _last = 0;
+(function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt = Math.min((ts - _last) / 1000, 0.05);
+  _last = ts;
+  orbit.update();
+  streamMat.uniforms.time.value += dt;
+  renderer.render(scene, camera);
+})(0);
+
+// ── Events ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.pbtn').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.dbtn').forEach(x => x.classList.remove('act'));
+  b.classList.add('act');
+  _flowDir = b.dataset.fd.split(',').map(Number);
+}));
+document.getElementById('run').addEventListener('click', runSim);
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if (streamThick) streamThick.material.resolution.set(innerWidth, innerHeight);
+});
+
+function st(s) { document.getElementById('st').textContent = s; }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+applyPreset('dark');
+loadScene().then(d => {
+  if (d?.length) st(`${d.length} object(s) loaded — pick wind direction, then ▶ Run.`);
+});
+</script>
+</body>
+</html>

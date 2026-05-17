@@ -1,0 +1,26 @@
+# Compiled binaries
+cfd_server
+cfd_pipeline
+meshmaster
+*.o
+*.a
+build/
+
+# Output files (too large for git)
+output/
+*.stl
+*.vtu
+*.ply
+*.obj
+*.step
+fixed.stl
+heat.ply
+model.obj
+
+# Temp / OS
+.DS_Store
+*.tmp
+/tmp/
+
+# Keep webui
+!webui/
