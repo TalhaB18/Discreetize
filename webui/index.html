@@ -1136,6 +1136,39 @@ body.sim-open #timeline-panel { display: none; }
   pointer-events: none;
 }
 
+/* ── Sim tab switcher ── */
+#sim-tabs { display:flex; gap:3px; }
+.sim-tab {
+  padding:2px 10px; border:1px solid #1a3a3a; border-radius:3px;
+  background:transparent; color:#556; cursor:pointer; font-size:9px;
+  transition:all 0.15s;
+}
+.sim-tab.act { border-color:#00e5ff; color:#00e5ff; background:rgba(0,229,255,0.08); }
+.sim-tab:hover { border-color:#00e5ff; color:#00e5ff; }
+.sim-pane { display:flex; flex:1; overflow:hidden; }
+/* Water simulation pane */
+#water-controls {
+  width:160px; flex-shrink:0; padding:8px;
+  display:flex; flex-direction:column; gap:6px;
+  border-right:1px solid #1a1a2e; overflow-y:auto;
+  font-size:9px; color:#aaa;
+}
+#water-controls label { display:flex; flex-direction:column; gap:2px; }
+#water-controls input[type=range] { width:100%; accent-color:#1e90ff; }
+#water-canvas-wrap {
+  flex:1; position:relative; overflow:hidden;
+  background:#020a18;
+}
+#water-canvas {
+  position:absolute; inset:0; width:100%; height:100%;
+  cursor:crosshair;
+}
+#water-status {
+  position:absolute; bottom:4px; right:8px;
+  font-size:9px; color:rgba(30,144,255,0.6);
+  pointer-events:none;
+}
+
 #tl-header {
   display: flex; align-items: center; gap: 4px;
   padding: 0 8px; height: 32px; flex-shrink: 0;
@@ -2566,12 +2599,16 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
 <div id="sim-panel">
   <div id="sim-header">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2"><path d="M3 12 Q6 4 9 12 Q12 20 15 12 Q18 4 21 12"/></svg>
-    <span>CFD FLOW SIMULATION</span>
+    <span>CFD SIMULATION</span>
+    <div id="sim-tabs">
+      <button class="sim-tab act" id="sim-tab-wind" onclick="window.switchSimTab('wind')">Wind</button>
+      <button class="sim-tab" id="sim-tab-water" onclick="window.switchSimTab('water')">Water</button>
+    </div>
     <button class="sim-btn" id="sim-run-btn" style="min-width:80px;">▶ Run</button>
     <button class="sim-btn" id="sim-clear-btn">Clear</button>
     <button class="sim-btn danger" onclick="document.body.classList.remove('sim-open');">✕ Close</button>
   </div>
-  <div id="sim-body">
+  <div id="sim-wind-pane" class="sim-pane">
     <div id="sim-controls">
       <label>Reynolds Number
         <input type="range" id="sim-re" min="20" max="500" value="150" oninput="document.getElementById('sim-re-val').textContent=this.value">
@@ -2611,6 +2648,32 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
     <div id="sim-canvas-wrap">
       <canvas id="sim-canvas"></canvas>
       <div id="sim-status">Ready — click Run</div>
+    </div>
+  </div>
+  <!-- Water simulation pane -->
+  <div id="sim-water-pane" class="sim-pane" style="display:none">
+    <div id="water-controls">
+      <label>Wave Speed
+        <input type="range" id="water-speed" min="1" max="5" value="3">
+      </label>
+      <label>Damping
+        <input type="range" id="water-damp" min="980" max="999" value="994">
+      </label>
+      <div style="border-top:1px solid #1a1a2e;padding-top:6px;margin-top:2px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="color:#1e90ff;">Obstacles</span>
+          <button class="sim-btn" id="water-from-scene" style="font-size:8px;padding:2px 5px;border-color:#1e90ff;color:#1e90ff;">From Scene</button>
+        </div>
+        <div id="water-obs-list"></div>
+      </div>
+      <div style="border-top:1px solid #1a1a2e;padding-top:6px;margin-top:4px;">
+        <button class="sim-btn" id="water-clear-btn" style="width:100%;border-color:#1e90ff;color:#1e90ff;">Clear Waves</button>
+      </div>
+      <div style="margin-top:5px;font-size:8px;color:#334;">Click to create ripple<br>Drag for continuous waves</div>
+    </div>
+    <div id="water-canvas-wrap">
+      <canvas id="water-canvas"></canvas>
+      <div id="water-status">Click the water to create ripples</div>
     </div>
   </div>
 </div>
@@ -6375,9 +6438,16 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
 
   // ── Particles ───────────────────────────────────────────────────
   function resetParticle(p) {
-    p.x   = Math.random() * 0.04;
-    p.y   = 0.05 + Math.random() * 0.90;
-    p.age = Math.random() * 120;
+    p.x = Math.random() * 0.03;
+    if (obstacles.length > 0) {
+      // Bias vertical spawn to obstacle position so every stream hits the object
+      const o = obstacles[Math.floor(Math.random() * obstacles.length)];
+      const spread = Math.max(o.r * 2.5, 0.08);
+      p.y = Math.max(0.05, Math.min(0.95, o.cy + (Math.random() * 2 - 1) * spread));
+    } else {
+      p.y = 0.35 + Math.random() * 0.30;
+    }
+    p.age = Math.random() * 80;
     p.trail = [];
   }
 
@@ -6451,14 +6521,25 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    // Inlet arrow
-    ctx.strokeStyle = 'rgba(0,229,255,0.5)';
-    ctx.lineWidth = 1;
-    for (let t = 0.15; t < 0.9; t += 0.15) {
+    // Inlet arrows — focused on obstacle band or default mid strip
+    ctx.strokeStyle = 'rgba(0,229,255,0.65)';
+    ctx.lineWidth = 1.2;
+    const arrowYs = [];
+    if (obstacles.length > 0) {
+      const avgCy = obstacles.reduce((s, o) => s + o.cy, 0) / obstacles.length;
+      const maxR  = obstacles.reduce((m, o) => Math.max(m, o.r), 0);
+      for (let t = -4; t <= 4; t++) {
+        const y = avgCy + t * maxR * 0.55;
+        if (y > 0.06 && y < 0.94) arrowYs.push(y);
+      }
+    } else {
+      [0.35, 0.42, 0.50, 0.58, 0.65].forEach(y => arrowYs.push(y));
+    }
+    for (const t of arrowYs) {
       const x = 8, y = t * H;
-      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+12,y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+12,y); ctx.lineTo(x+8,y-3); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x+12,y); ctx.lineTo(x+8,y+3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+14,y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+14,y); ctx.lineTo(x+10,y-3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+14,y); ctx.lineTo(x+10,y+3); ctx.stroke();
     }
   }
 
@@ -6546,7 +6627,7 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
       const res  = await fetch('/api/sim/run', { method:'POST', headers:{'Content-Type':'application/json'}, body });
       if (!res.ok) throw new Error(await res.text());
       simData = await res.json();
-      initParticles(120);
+      initParticles(80);
       let vmax = 0;
       for (const v of simData.speed) if (v > vmax) vmax = v;
       status.textContent = `Done — ${simData.nx}×${simData.ny}  Vmax=${vmax.toFixed(4)}  Re=${re}`;
@@ -6577,6 +6658,190 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
   // Kick off the draw loop
   _raf = requestAnimationFrame(animLoop);
   drawObstacles();
+})();
+
+// ── Tab switcher ──────────────────────────────────────────────
+window.switchSimTab = function(tab) {
+  ['wind','water'].forEach(t => {
+    const pane = document.getElementById('sim-'+t+'-pane');
+    const btn  = document.getElementById('sim-tab-'+t);
+    if (pane) pane.style.display = t===tab ? 'flex' : 'none';
+    if (btn)  btn.classList.toggle('act', t===tab);
+  });
+  const runBtn   = document.getElementById('sim-run-btn');
+  const clearBtn = document.getElementById('sim-clear-btn');
+  if (runBtn)   runBtn.style.display   = tab==='wind' ? '' : 'none';
+  if (clearBtn) clearBtn.style.display = tab==='wind' ? '' : 'none';
+  if (tab === 'water') { if (window._waterSimStart) window._waterSimStart(); }
+  else                 { if (window._waterSimStop)  window._waterSimStop();  }
+};
+
+// =============================================================================
+// ── Water Simulation (2D wave equation) ──────────────────────────────────────
+// =============================================================================
+(function() {
+  const wc  = document.getElementById('water-canvas');
+  if (!wc) return;
+  const ctx  = wc.getContext('2d');
+  const statusEl = document.getElementById('water-status');
+
+  const NW = 220, NH = 100;
+  let buf0 = new Float32Array(NW * NH); // t-1
+  let buf1 = new Float32Array(NW * NH); // t   (current)
+  let buf2 = new Float32Array(NW * NH); // t+1 (scratch)
+  let solid = new Uint8Array(NW * NH);
+  let waterObs = [];
+  let _raf = null;
+
+  function resize() {
+    const wrap = document.getElementById('water-canvas-wrap');
+    if (!wrap) return;
+    wc.width  = wrap.clientWidth  || 600;
+    wc.height = wrap.clientHeight || 260;
+  }
+
+  function clearWaves() { buf0.fill(0); buf1.fill(0); buf2.fill(0); }
+
+  function buildSolid() {
+    solid.fill(0);
+    for (const o of waterObs) {
+      const cx = Math.floor(o.cx * NW);
+      const cy = Math.floor(o.cy * NH);
+      const r  = Math.ceil(o.r * Math.min(NW, NH));
+      for (let y = Math.max(0,cy-r); y<=Math.min(NH-1,cy+r); y++)
+        for (let x = Math.max(0,cx-r); x<=Math.min(NW-1,cx+r); x++)
+          if ((x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r) solid[y*NW+x]=1;
+    }
+  }
+
+  function addRipple(nx, ny, strength) {
+    const cx = Math.floor(nx * NW), cy = Math.floor(ny * NH), r = 4;
+    for (let y = Math.max(0,cy-r); y<=Math.min(NH-1,cy+r); y++)
+      for (let x = Math.max(0,cx-r); x<=Math.min(NW-1,cx+r); x++) {
+        if (solid[y*NW+x]) continue;
+        const d = Math.sqrt((x-cx)**2+(y-cy)**2);
+        if (d < r) buf1[y*NW+x] += strength * (1 - d/r);
+      }
+  }
+
+  function stepWave() {
+    const speedEl = document.getElementById('water-speed');
+    const dampEl  = document.getElementById('water-damp');
+    const c2   = Math.pow(parseFloat(speedEl?.value||3) * 0.085, 2);
+    const damp = parseFloat(dampEl?.value||994) / 1000;
+    for (let y=1; y<NH-1; y++) {
+      for (let x=1; x<NW-1; x++) {
+        const i = y*NW+x;
+        if (solid[i]) { buf2[i]=0; continue; }
+        const lap = buf1[(y-1)*NW+x] + buf1[(y+1)*NW+x] + buf1[y*NW+x-1] + buf1[y*NW+x+1] - 4*buf1[i];
+        buf2[i] = (2*buf1[i] - buf0[i] + c2*lap) * damp;
+      }
+    }
+    // Absorbing edges (damp boundary row/col)
+    for (let x=0; x<NW; x++) { buf2[x]=buf2[NW+x]*0.5; buf2[(NH-1)*NW+x]=buf2[(NH-2)*NW+x]*0.5; }
+    for (let y=0; y<NH; y++) { buf2[y*NW]=buf2[y*NW+1]*0.5; buf2[y*NW+NW-1]=buf2[y*NW+NW-2]*0.5; }
+    const tmp=buf0; buf0=buf1; buf1=buf2; buf2=tmp;
+  }
+
+  function drawWater() {
+    const W=wc.width, H=wc.height;
+    const img=ctx.createImageData(W,H);
+    let vmax=0.005;
+    for (let i=0;i<NW*NH;i++) { const v=Math.abs(buf1[i]); if(v>vmax)vmax=v; }
+    for (let py=0;py<H;py++) {
+      for (let px=0;px<W;px++) {
+        const gx=Math.floor(px*NW/W), gy=Math.floor(py*NH/H);
+        const i=gy*NW+gx, p=(py*W+px)*4;
+        if (solid[i]) {
+          img.data[p]=55; img.data[p+1]=48; img.data[p+2]=38; img.data[p+3]=255;
+        } else {
+          const h=Math.max(-1,Math.min(1,buf1[i]/vmax));
+          const t=(h+1)*0.5;
+          let r,g,b;
+          if (t<0.45) {
+            const s=t/0.45;
+            r=Math.round(4+s*12); g=Math.round(12+s*45); b=Math.round(70+s*110);
+          } else if (t<0.55) {
+            r=16; g=57; b=180;
+          } else {
+            const s=(t-0.55)/0.45;
+            r=Math.round(16+s*224); g=Math.round(57+s*193); b=Math.round(180+s*75);
+          }
+          img.data[p]=r; img.data[p+1]=g; img.data[p+2]=b; img.data[p+3]=255;
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
+    // obstacle outlines
+    ctx.strokeStyle='rgba(210,180,90,0.9)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+    for (const o of waterObs) {
+      ctx.beginPath();
+      ctx.arc(o.cx*W, o.cy*H, o.r*Math.min(W,H), 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+
+  function animLoop() {
+    for (let i=0;i<4;i++) stepWave();
+    drawWater();
+    _raf = requestAnimationFrame(animLoop);
+  }
+
+  // Click/drag interaction
+  let dragging = false;
+  wc.addEventListener('mousedown', e => { dragging=true; });
+  wc.addEventListener('mouseup',   () => { dragging=false; });
+  wc.addEventListener('mouseleave',() => { dragging=false; });
+  wc.addEventListener('click', e => {
+    const rect=wc.getBoundingClientRect();
+    const nx=(e.clientX-rect.left)/wc.width, ny=(e.clientY-rect.top)/wc.height;
+    addRipple(nx,ny,1.0);
+    if(statusEl) statusEl.textContent=`Ripple at (${nx.toFixed(2)}, ${ny.toFixed(2)})`;
+  });
+  wc.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const rect=wc.getBoundingClientRect();
+    addRipple((e.clientX-rect.left)/wc.width, (e.clientY-rect.top)/wc.height, 0.35);
+  });
+
+  // From Scene
+  document.getElementById('water-from-scene')?.addEventListener('click', () => {
+    if (!window.files||files.length===0) { if(window.toast)toast('No objects in scene'); return; }
+    waterObs=[];
+    const allBox=new THREE.Box3();
+    files.forEach(f=>{if(f.stlGroup&&f.visible)allBox.expandByObject(f.stlGroup);});
+    const sz=new THREE.Vector3(); allBox.getSize(sz);
+    files.forEach(f=>{
+      if(!f.stlGroup||!f.visible) return;
+      const box=new THREE.Box3().setFromObject(f.stlGroup);
+      const c=new THREE.Vector3(),s=new THREE.Vector3();
+      box.getCenter(c); box.getSize(s);
+      const cx=(c.x-allBox.min.x)/(sz.x||1);
+      const cy=(c.z-allBox.min.z)/(sz.z||1);
+      const r=Math.max(s.x,s.z)/(2*Math.max(sz.x,sz.z,0.001))*0.45;
+      waterObs.push({cx:0.3+cx*0.4, cy:0.2+cy*0.6, r:Math.max(0.03,Math.min(0.15,r))});
+    });
+    buildSolid(); clearWaves();
+    if(window.toast) toast(`Added ${waterObs.length} obstacle(s) from scene`);
+  });
+
+  document.getElementById('water-clear-btn')?.addEventListener('click', () => {
+    waterObs=[]; buildSolid(); clearWaves();
+    if(statusEl) statusEl.textContent='Cleared — click to create ripples';
+  });
+
+  window.addEventListener('resize', () => {
+    if (document.getElementById('sim-water-pane')?.style.display!=='none') resize();
+  });
+
+  window._waterSimStart = () => {
+    if (_raf) return;
+    resize();
+    _raf = requestAnimationFrame(animLoop);
+  };
+  window._waterSimStop = () => {
+    if (_raf) { cancelAnimationFrame(_raf); _raf=null; }
+  };
 })();
 
 </script>
