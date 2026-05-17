@@ -2791,6 +2791,144 @@ static std::string handle_ai_analyze(const HttpRequest& req) {
 }
 
 // =============================================================================
+// POST /api/ai/chat — CFD knowledge-base chat engine
+// Body: { message, goal, physics }
+// =============================================================================
+static std::string handle_ai_chat(const HttpRequest& req) {
+    std::string msg     = json_string_value(req.body, "message");
+    std::string goal    = json_string_value(req.body, "goal");
+    std::string physics = json_string_value(req.body, "physics");
+    if (msg.empty()) return error_json(400, "message required");
+
+    // Lowercase for matching
+    std::string ml = msg;
+    std::transform(ml.begin(), ml.end(), ml.begin(), ::tolower);
+
+    std::string reply;
+    std::vector<std::string> sugg;
+
+    auto contains = [&](const std::string& s){ return ml.find(s) != std::string::npos; };
+
+    if (contains("y+") || contains("y plus") || contains("yplus") || contains("wall distance")) {
+        reply = "y+ is the dimensionless wall distance critical for turbulence accuracy.\n\n"
+                "• Wall-resolved (k-ω SST): y+ < 1 — resolves the viscous sublayer\n"
+                "• Wall functions: 30 < y+ < 300 — uses log-law approximation\n\n"
+                "First cell height h ≈ (y+ × ν) / u_τ\n"
+                "where u_τ ≈ 0.05 × U_∞ for external flow.\n\n"
+                "For " + (physics.empty() ? "aerodynamics" : physics) + " with " +
+                (goal == "accuracy" ? "accuracy goal, target y+ < 1." :
+                 goal == "speed"    ? "speed goal, y+ 30–100 with wall functions is acceptable." :
+                                     "balanced goal, aim for y+ < 5 with enhanced wall treatment.");
+        sugg = {"How to set first cell height in mesh?","Wall functions vs wall-resolved — which to choose?","k-omega SST y+ requirements"};
+
+    } else if (contains("turbulence") || contains("k-omega") || contains("k-epsilon") || contains("spalart") || contains("rans")) {
+        if      (physics == "aerodynamics")   reply = "For aerodynamics: k-ω SST is the gold standard. It switches between k-ε (freestream) and k-ω (near wall), handling adverse pressure gradients and trailing-edge separation well.\n\nSpalart-Allmaras is faster and works well for attached flows (wings at low AoA).";
+        else if (physics == "internal_flow")  reply = "For internal flow: k-ε Realizable handles recirculation, jets, and separating flow better than standard k-ε. k-ε RNG is good when swirl is present (cyclones, curved ducts).";
+        else if (physics == "heat_transfer")  reply = "For conjugate heat transfer: k-ω SST with Enhanced Wall Treatment. It accurately resolves the thermal boundary layer when y+ < 1. The Prandtl turbulent number Pr_t ≈ 0.85 is used for the energy equation.";
+        else if (physics == "combustion")     reply = "For combustion: k-ε Realizable with Eddy Dissipation Concept (EDC) for detailed chemistry, or simple Eddy Dissipation for fast reactions. Consider enabling Radiation (P1 or Discrete Ordinates) for high-temperature flames.";
+        else                                  reply = "Turbulence model guide:\n• k-ω SST — best all-round for external aero\n• k-ε Realizable — internal flows, jets\n• k-ε RNG — swirling/rotating flows\n• Spalart-Allmaras — simple aero, fast\n• RSM — highly anisotropic flows (expensive)";
+        sugg = {"What y+ for this model?","Inlet turbulence intensity values","When does turbulence model choice matter most?"};
+
+    } else if (contains("mesh") && (contains("size") || contains("refine") || contains("coarse") || contains("fine"))) {
+        reply = "Mesh sizing rules of thumb:\n\n"
+                "Base size (% of char. length):\n"
+                "• Speed goal: 5–7%\n"
+                "• Balanced: 3–4%\n"
+                "• Accuracy: 1–2%\n\n"
+                "Refinement zones:\n"
+                "• Surface: 20–40% of base size\n"
+                "• Wake: 8–15% of base, extend 5–8× downstream\n"
+                "• Boundary layers: 10–15 layers, growth rate 1.15–1.2\n\n"
+                "Click ⚡ Analyze for scene-specific values.";
+        sugg = {"How many boundary layers?","Wake zone dimensions","Mesh independence study"};
+
+    } else if (contains("boundary condition") || contains("inlet") || contains("outlet") || contains("bc ")) {
+        reply = "Standard boundary conditions:\n\n"
+                "• Velocity inlet — specify U, k, ε (or ω), temperature\n"
+                "• Pressure outlet — gauge pressure = 0 Pa (recommended)\n"
+                "• No-slip wall — default; add heat flux for thermal problems\n"
+                "• Symmetry — zero normal flux; valid only when flow is symmetric\n"
+                "• Periodic — for repeating geometries (blade passages, fins)\n"
+                "• Farfield — for external compressible aerodynamics\n\n"
+                "Domain size: place inlet/outlet at least 10× L from the object.";
+        sugg = {"Turbulence intensity at inlet","Domain sizing for external flow","When to use symmetry?"};
+
+    } else if (contains("converg") || contains("residual") || contains("diverge") || contains("not converging")) {
+        reply = "Convergence troubleshooting:\n\n"
+                "1. Check mesh quality — skewness < 0.85, aspect ratio < 100\n"
+                "2. Reduce under-relaxation: pressure 0.3, momentum 0.5\n"
+                "3. Start with 1st-order schemes, switch to 2nd after ~200 iter.\n"
+                "4. Initialize from freestream, not zero\n"
+                "5. Monitor Cl/Cd alongside residuals — they must stabilize too\n"
+                "6. If oscillating: flow may be unsteady — switch to transient\n\n"
+                "Target: continuity < 1e-4 for engineering, < 1e-6 for research.";
+        sugg = {"How to check mesh quality?","Switching to transient solver","Under-relaxation factor guide"};
+
+    } else if (contains("lift") || contains("drag") || contains(" cd ") || contains(" cl ") || contains("coefficient")) {
+        reply = "Aerodynamic coefficients:\n\n"
+                "Cd = F_drag / (½ ρ U² A_ref)\n"
+                "Cl = F_lift / (½ ρ U² A_ref)\n\n"
+                "Best practices:\n"
+                "• Use 2nd-order upwind for momentum — critical for force accuracy\n"
+                "• Pressure + viscous contributions reported separately\n"
+                "• A_ref: frontal area (bluff bodies) or planform area (wings)\n"
+                "• Run 500–2000 iterations and average last 200 if oscillating\n"
+                "• Mesh sensitivity: Cd should change < 1% on refinement";
+        sugg = {"Reference area setup","Pressure vs viscous drag breakdown","How to reduce drag numerically?"};
+
+    } else if (contains("heat") || contains("thermal") || contains("temperature") || contains("nusselt")) {
+        reply = "Heat transfer setup:\n\n"
+                "• Enable energy equation in solver\n"
+                "• Wall BC: constant T (isothermal) or constant q'' (heat flux)\n"
+                "• Nu = h·L/k — post-process from wall heat flux\n"
+                "• Resolve thermal BL: y+ < 1 mandatory for accuracy\n"
+                "• Pr (water) ≈ 7, Pr (air) ≈ 0.71, Pr (oil) >> 1\n"
+                "• Thinner thermal BL for high Pr fluids — needs finer wall mesh";
+        sugg = {"Conjugate heat transfer setup","Convective heat transfer coefficient","Thermal boundary layer thickness"};
+
+    } else if (contains("domain") || contains("far field") || contains("farfield") || contains("domain size")) {
+        std::string sz = (physics == "aerodynamics") ? "20–30× chord" :
+                         (physics == "internal_flow") ? "10–20× diameter for inlet/outlet extensions" :
+                                                       "15× characteristic length";
+        reply = "Domain sizing for " + (physics.empty() ? "external flow" : physics) + ":\n\n"
+                "• Recommended extent: " + sz + "\n"
+                "• Upstream: 5–8× L (less critical)\n"
+                "• Downstream: 15–20× L (captures wake)\n"
+                "• Lateral: 10× L (minimizes blockage effects)\n\n"
+                "Blockage ratio = A_object / A_domain cross-section < 5% for valid results.\n"
+                "Higher blockage artificially increases drag.";
+        sugg = {"What is blockage ratio?","Inlet placement","Outlet backflow issues"};
+
+    } else if (contains("what") && (contains("do") || contains("how") || contains("should") || contains("recommend"))) {
+        reply = "Here's how to get started with your CFD analysis:\n\n"
+                "1. Select your Goal (Speed / Balanced / Accuracy) above\n"
+                "2. Select the Physics Type matching your application\n"
+                "3. Click ⚡ Detect to auto-identify geometric features\n"
+                "4. Click Analyze — the C++ engine will compute mesh settings,\n"
+                "   boundary layer parameters, and solver recommendations\n\n"
+                "Then ask me any specific question about your setup!";
+        sugg = {"What turbulence model for aerodynamics?","How many boundary layers?","Explain y+ to me"};
+
+    } else {
+        reply = "I'm the Discreetize CFD advisor powered by the C++ analysis engine. I can answer questions about:\n\n"
+                "• Turbulence models (k-ω SST, k-ε, SA, RSM)\n"
+                "• Mesh settings (sizing, boundary layers, wake zones)\n"
+                "• Boundary conditions (inlet, outlet, symmetry, walls)\n"
+                "• Convergence & solver settings\n"
+                "• Physics (lift/drag, heat transfer, combustion)\n"
+                "• y+ and wall treatment\n\n"
+                "Try the Analyze button for scene-specific recommendations!";
+        sugg = {"Best turbulence model for my physics?","How to set up boundary layers?","Why isn't my simulation converging?"};
+    }
+
+    std::ostringstream o;
+    o << "{\"reply\":\"" << json_escape(reply) << "\",\"suggestions\":[";
+    for (size_t i = 0; i < sugg.size(); ++i) { if (i) o << ","; o << "\"" << json_escape(sugg[i]) << "\""; }
+    o << "]}";
+    return ok_json(o.str());
+}
+
+// =============================================================================
 // Request dispatcher
 // =============================================================================
 
@@ -2979,6 +3117,9 @@ static std::string dispatch(const HttpRequest& req) {
 
     if (method == "POST" && route == "/api/ai/analyze")
         return handle_ai_analyze(req);
+
+    if (method == "POST" && route == "/api/ai/chat")
+        return handle_ai_chat(req);
 
     // CORS preflight
     if (method == "OPTIONS")
