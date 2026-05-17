@@ -2812,13 +2812,11 @@ static std::string handle_ai_analyze(const HttpRequest& req) {
 }
 
 // =============================================================================
-// POST /api/ai/chat — CFD knowledge-base chat engine
-// Body: { message, goal, physics }
+// POST /api/ai/chat — assistant chat (app help + CFD knowledge)
+// Body: { message }
 // =============================================================================
 static std::string handle_ai_chat(const HttpRequest& req) {
-    std::string msg     = json_string_value(req.body, "message");
-    std::string goal    = json_string_value(req.body, "goal");
-    std::string physics = json_string_value(req.body, "physics");
+    std::string msg = json_string_value(req.body, "message");
     if (msg.empty()) return error_json(400, "message required");
 
     // Lowercase for matching
@@ -2830,25 +2828,122 @@ static std::string handle_ai_chat(const HttpRequest& req) {
 
     auto contains = [&](const std::string& s){ return ml.find(s) != std::string::npos; };
 
-    if (contains("y+") || contains("y plus") || contains("yplus") || contains("wall distance")) {
+    // ── App / tool usage ──────────────────────────────────────────────────────
+    if (contains("import") || contains("upload") || contains("open file") || contains("load stl") || contains("add stl") || contains("load a file")) {
+        reply = "To import a file:\n\n"
+                "1. Click the Upload button (↑) in the top toolbar, or drag-and-drop an STL file onto the viewport\n"
+                "2. Your model will appear in the scene and in the Scene panel on the right\n"
+                "3. Supported formats: STL (binary and ASCII)\n\n"
+                "Once loaded you can transform, duplicate, or generate a CFD mesh from it.";
+        sugg = {"How do I generate a mesh?", "How do I move or rotate an object?", "How do I run a simulation?"};
+
+    } else if ((contains("mesh") || contains("generat")) && (contains("how") || contains("create") || contains("make") || contains("run") || contains("start"))) {
+        reply = "To generate a CFD mesh:\n\n"
+                "1. Import your STL file first\n"
+                "2. Select the object in the Scene panel\n"
+                "3. Open the Mesh panel (right side) and set mesh size\n"
+                "4. Click Generate Mesh — the C++ engine runs boundary layer inflation and tet core filling\n"
+                "5. The result appears in the viewport; use the checkboxes to toggle surface/volume display\n\n"
+                "Mesh generation typically takes a few seconds.";
+        sugg = {"How do I run a wind simulation?", "What mesh size should I use?", "How do I view the mesh result?"};
+
+    } else if (contains("simulat") || contains("run sim") || contains("wind sim") || contains("cfd run") || contains("how do i run") || contains("run the")) {
+        reply = "To run a CFD simulation:\n\n"
+                "1. Generate a mesh first (or load a scene)\n"
+                "2. Click the CFD Sim button in the top toolbar\n"
+                "3. A simulation window opens with Wind and Water tabs\n"
+                "4. Wind tab: set velocity and angle, click Run — stream lines show flow around your model\n"
+                "5. Water tab: a 2D wave simulation where your model cross-section acts as an obstacle\n\n"
+                "The 2D LBM simulation runs live in the browser.";
+        sugg = {"How do I adjust wind speed?", "What does the stream visualisation show?", "How do I import an STL?"};
+
+    } else if (contains("undo") || contains("ctrl z") || contains("reverse") || contains("go back")) {
+        reply = "To undo the last action press Ctrl+Z (or Cmd+Z on Mac).\n\n"
+                "Undo works for object transforms (move, rotate, scale) and most scene edits. It does not currently undo mesh generation or file imports.";
+        sugg = {"How do I delete an object?", "How do I reset the view?", "How do I move an object?"};
+
+    } else if (contains("delete") || contains("remove object") || contains("remove model")) {
+        reply = "To delete an object:\n\n"
+                "1. Select the object in the viewport or Scene panel\n"
+                "2. Press the Delete key (or Backspace)\n\n"
+                "You can also right-click the object in the Scene panel for options.";
+        sugg = {"How do I undo?", "How do I import a new file?", "How do I select multiple objects?"};
+
+    } else if (contains("move") || contains("rotat") || contains("scale") || contains("transform") || contains("position")) {
+        reply = "To transform objects:\n\n"
+                "• Select an object by clicking it in the viewport\n"
+                "• Use the toolbar buttons: Move (G), Rotate (R), Scale (S)\n"
+                "• Drag the gizmo handles in the viewport\n"
+                "• Or type exact values in the Properties panel on the right\n\n"
+                "Switch between Object Mode and Edit Mode using the mode selector in the top bar.";
+        sugg = {"How do I undo a transform?", "How do I snap to grid?", "How do I reset position to origin?"};
+
+    } else if (contains("camera") || contains("orbit") || contains("zoom") || contains("navigate") || contains("view") || contains("pan")) {
+        reply = "Viewport navigation:\n\n"
+                "• Orbit — Left-click drag (or middle-click drag)\n"
+                "• Pan — Shift + left-click drag\n"
+                "• Zoom — Scroll wheel\n"
+                "• Focus on selection — F key\n"
+                "• Reset camera — double-click empty space\n\n"
+                "The toolbar also has preset view buttons (top, front, side, perspective).";
+        sugg = {"How do I focus on my model?", "How do I reset the camera?", "How do I change to orthographic view?"};
+
+    } else if (contains("wireframe") || contains("wire frame")) {
+        reply = "Toggle wireframe mode with the grid icon button in the left toolbar (or press W).\n\n"
+                "Wireframe shows the mesh edges without filled faces — useful for checking mesh density and topology. Click again to return to solid view.";
+        sugg = {"How do I view the volume mesh?", "How do I toggle the surface fill?", "How do I generate a mesh?"};
+
+    } else if (contains("measure") || contains("distance") || contains("ruler")) {
+        reply = "To measure distances:\n\n"
+                "1. Click the ruler icon in the left toolbar to activate Measure mode (cursor turns to crosshair)\n"
+                "2. Click two points on the model surface\n"
+                "3. The distance is shown in the viewport\n"
+                "4. Click the ruler icon again to exit measure mode\n\n"
+                "Distances are in the same units as your STL file.";
+        sugg = {"How do I change units?", "How do I find object dimensions?", "How do I navigate the viewport?"};
+
+    } else if (contains("export") || contains("download") || contains("save") || contains("stl output")) {
+        reply = "To export your model or mesh:\n\n"
+                "• Export button in the top toolbar saves the current scene as STL\n"
+                "• After mesh generation, you can export the mesh in OpenFOAM, Fluent, or SU2 format from the Mesh panel\n\n"
+                "Use File → Export or the download icon in the toolbar.";
+        sugg = {"How do I generate a mesh?", "What export formats are supported?", "How do I import an STL?"};
+
+    } else if (contains("primitiv") || contains("add box") || contains("add sphere") || contains("add cylinder") || contains("create shape")) {
+        reply = "To add a primitive shape:\n\n"
+                "1. Click the + (Add) button in the top toolbar\n"
+                "2. Choose Box, Sphere, or Cylinder\n"
+                "3. Set dimensions in the dialog and click Add\n"
+                "4. The shape appears in the scene — you can transform or mesh it like any imported object\n\n"
+                "Primitives are great for building simple test geometries.";
+        sugg = {"How do I move the shape?", "How do I generate a mesh?", "How do I combine two shapes?"};
+
+    } else if (contains("sun") || contains("light") || contains("lighting") || contains("dark") || contains("bright")) {
+        reply = "The sun/light toggle in the left toolbar turns the directional lights on and off.\n\n"
+                "• Click the sun icon to toggle scene lighting\n"
+                "• When lights are off, the model displays in flat/ambient-only mode\n"
+                "• This is useful for examining the mesh without specular highlights getting in the way.";
+        sugg = {"How do I toggle wireframe?", "How do I use the measure tool?", "How do I reset the camera?"};
+
+    // ── CFD knowledge ─────────────────────────────────────────────────────────
+    } else if (contains("y+") || contains("y plus") || contains("yplus") || contains("wall distance")) {
         reply = "y+ is the dimensionless wall distance critical for turbulence accuracy.\n\n"
                 "• Wall-resolved (k-ω SST): y+ < 1 — resolves the viscous sublayer\n"
                 "• Wall functions: 30 < y+ < 300 — uses log-law approximation\n\n"
                 "First cell height h ≈ (y+ × ν) / u_τ\n"
                 "where u_τ ≈ 0.05 × U_∞ for external flow.\n\n"
-                "For " + (physics.empty() ? "aerodynamics" : physics) + " with " +
-                (goal == "accuracy" ? "accuracy goal, target y+ < 1." :
-                 goal == "speed"    ? "speed goal, y+ 30–100 with wall functions is acceptable." :
-                                     "balanced goal, aim for y+ < 5 with enhanced wall treatment.");
+                "For most external aerodynamics, target y+ < 1 for best accuracy.";
         sugg = {"How to set first cell height in mesh?","Wall functions vs wall-resolved — which to choose?","k-omega SST y+ requirements"};
 
     } else if (contains("turbulence") || contains("k-omega") || contains("k-epsilon") || contains("spalart") || contains("rans")) {
-        if      (physics == "aerodynamics")   reply = "For aerodynamics: k-ω SST is the gold standard. It switches between k-ε (freestream) and k-ω (near wall), handling adverse pressure gradients and trailing-edge separation well.\n\nSpalart-Allmaras is faster and works well for attached flows (wings at low AoA).";
-        else if (physics == "internal_flow")  reply = "For internal flow: k-ε Realizable handles recirculation, jets, and separating flow better than standard k-ε. k-ε RNG is good when swirl is present (cyclones, curved ducts).";
-        else if (physics == "heat_transfer")  reply = "For conjugate heat transfer: k-ω SST with Enhanced Wall Treatment. It accurately resolves the thermal boundary layer when y+ < 1. The Prandtl turbulent number Pr_t ≈ 0.85 is used for the energy equation.";
-        else if (physics == "combustion")     reply = "For combustion: k-ε Realizable with Eddy Dissipation Concept (EDC) for detailed chemistry, or simple Eddy Dissipation for fast reactions. Consider enabling Radiation (P1 or Discrete Ordinates) for high-temperature flames.";
-        else                                  reply = "Turbulence model guide:\n• k-ω SST — best all-round for external aero\n• k-ε Realizable — internal flows, jets\n• k-ε RNG — swirling/rotating flows\n• Spalart-Allmaras — simple aero, fast\n• RSM — highly anisotropic flows (expensive)";
-        sugg = {"What y+ for this model?","Inlet turbulence intensity values","When does turbulence model choice matter most?"};
+        reply = "Turbulence model guide:\n\n"
+                "• k-ω SST — best all-round for external aerodynamics; handles adverse pressure gradients well\n"
+                "• k-ε Realizable — internal flows, jets, recirculation\n"
+                "• k-ε RNG — swirling or rotating flows (cyclones, curved ducts)\n"
+                "• Spalart-Allmaras — simple attached aero flows; fast and robust\n"
+                "• RSM — highly anisotropic flows (expensive, rarely needed)\n\n"
+                "For most aerodynamics problems, start with k-ω SST.";
+        sugg = {"What y+ for k-ω SST?","Inlet turbulence intensity values","When does turbulence model choice matter most?"};
 
     } else if (contains("mesh") && (contains("size") || contains("refine") || contains("coarse") || contains("fine"))) {
         reply = "Mesh sizing rules of thumb:\n\n"
@@ -2860,7 +2955,7 @@ static std::string handle_ai_chat(const HttpRequest& req) {
                 "• Surface: 20–40% of base size\n"
                 "• Wake: 8–15% of base, extend 5–8× downstream\n"
                 "• Boundary layers: 10–15 layers, growth rate 1.15–1.2\n\n"
-                "Click ⚡ Analyze for scene-specific values.";
+                "Finer mesh = longer compute time but higher accuracy.";
         sugg = {"How many boundary layers?","Wake zone dimensions","Mesh independence study"};
 
     } else if (contains("boundary condition") || contains("inlet") || contains("outlet") || contains("bc ")) {
@@ -2908,38 +3003,38 @@ static std::string handle_ai_chat(const HttpRequest& req) {
         sugg = {"Conjugate heat transfer setup","Convective heat transfer coefficient","Thermal boundary layer thickness"};
 
     } else if (contains("domain") || contains("far field") || contains("farfield") || contains("domain size")) {
-        std::string sz = (physics == "aerodynamics") ? "20–30× chord" :
-                         (physics == "internal_flow") ? "10–20× diameter for inlet/outlet extensions" :
-                                                       "15× characteristic length";
-        reply = "Domain sizing for " + (physics.empty() ? "external flow" : physics) + ":\n\n"
-                "• Recommended extent: " + sz + "\n"
-                "• Upstream: 5–8× L (less critical)\n"
+        reply = "Domain sizing for external flow:\n\n"
+                "• Aerodynamics: 20–30× chord length\n"
+                "• Internal flow: 10–20× duct diameter for inlet/outlet extensions\n"
+                "• General: 15× characteristic length\n\n"
+                "• Upstream: 5–8× L\n"
                 "• Downstream: 15–20× L (captures wake)\n"
-                "• Lateral: 10× L (minimizes blockage effects)\n\n"
-                "Blockage ratio = A_object / A_domain cross-section < 5% for valid results.\n"
-                "Higher blockage artificially increases drag.";
+                "• Lateral: 10× L (minimizes blockage)\n\n"
+                "Blockage ratio = A_object / A_domain < 5% for valid results.";
         sugg = {"What is blockage ratio?","Inlet placement","Outlet backflow issues"};
 
-    } else if (contains("what") && (contains("do") || contains("how") || contains("should") || contains("recommend"))) {
-        reply = "Here's how to get started with your CFD analysis:\n\n"
-                "1. Select your Goal (Speed / Balanced / Accuracy) above\n"
-                "2. Select the Physics Type matching your application\n"
-                "3. Click ⚡ Detect to auto-identify geometric features\n"
-                "4. Click Analyze — the C++ engine will compute mesh settings,\n"
-                "   boundary layer parameters, and solver recommendations\n\n"
-                "Then ask me any specific question about your setup!";
-        sugg = {"What turbulence model for aerodynamics?","How many boundary layers?","Explain y+ to me"};
+    } else if (contains("what") && (contains("do") || contains("can") || contains("help"))) {
+        reply = "I can help with:\n\n"
+                "Tool usage:\n"
+                "• Importing STL files, generating meshes, running simulations\n"
+                "• Toolbar buttons (measure, wireframe, lights, undo)\n"
+                "• Exporting and viewport navigation\n\n"
+                "CFD knowledge:\n"
+                "• Turbulence models, mesh sizing, boundary conditions\n"
+                "• y+ and boundary layers, convergence tips\n"
+                "• Lift/drag, heat transfer, domain sizing\n\n"
+                "Just ask!";
+        sugg = {"How do I import an STL?","How do I run a simulation?","What turbulence model should I use?"};
 
     } else {
-        reply = "I'm the Discreetize CFD advisor powered by the C++ analysis engine. I can answer questions about:\n\n"
-                "• Turbulence models (k-ω SST, k-ε, SA, RSM)\n"
-                "• Mesh settings (sizing, boundary layers, wake zones)\n"
-                "• Boundary conditions (inlet, outlet, symmetry, walls)\n"
-                "• Convergence & solver settings\n"
-                "• Physics (lift/drag, heat transfer, combustion)\n"
-                "• y+ and wall treatment\n\n"
-                "Try the Analyze button for scene-specific recommendations!";
-        sugg = {"Best turbulence model for my physics?","How to set up boundary layers?","Why isn't my simulation converging?"};
+        reply = "I'm the Discreetize assistant. I can help with tool usage or CFD questions.\n\n"
+                "Try asking:\n"
+                "• How do I import an STL?\n"
+                "• How do I generate a mesh?\n"
+                "• How do I run a simulation?\n"
+                "• What turbulence model should I use?\n"
+                "• How many boundary layers do I need?";
+        sugg = {"How do I import an STL?","How do I generate a mesh?","What turbulence model should I use?"};
     }
 
     std::ostringstream o;
