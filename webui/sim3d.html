@@ -84,45 +84,64 @@ body.eng{
 </head>
 <body>
 <canvas id="c"></canvas>
+<canvas id="wc" style="position:fixed;left:0;right:0;bottom:0;display:none;cursor:crosshair;z-index:4;"></canvas>
 
 <div id="bar">
   <div id="bar-row">
     <h1>⟶ CFD</h1>
     <div class="vsep"></div>
-
-    <!-- Presets -->
-    <span style="font-size:9px;color:var(--lbl,#445)">Preset:</span>
-    <button class="pbtn act" data-preset="dark">Dark</button>
-    <button class="pbtn"     data-preset="eng">Engineering</button>
-
+    <!-- Mode tabs -->
+    <button class="pbtn act" id="tab-wind">⟶ Wind</button>
+    <button class="pbtn"     id="tab-water">∿ Water</button>
     <div class="vsep"></div>
 
-    <!-- Wind direction -->
-    <span style="font-size:9px;color:var(--lbl,#445)">Wind:</span>
-    <button class="dbtn act" data-fd="1,0,0">W→E</button>
-    <button class="dbtn"     data-fd="-1,0,0">E→W</button>
-    <button class="dbtn"     data-fd="0,0,1">S→N</button>
-    <button class="dbtn"     data-fd="0,0,-1">N→S</button>
+    <!-- Wind controls (contents layout = transparent wrapper in flex) -->
+    <div id="wind-ctrls" style="display:contents">
+      <!-- Presets -->
+      <span style="font-size:9px;color:var(--lbl,#445)">Preset:</span>
+      <button class="pbtn act" data-preset="dark">Dark</button>
+      <button class="pbtn"     data-preset="eng">Engineering</button>
 
-    <div class="vsep"></div>
+      <div class="vsep"></div>
 
-    <span class="slbl">Streams
-      <input type="range" id="scount" min="80" max="500" value="300"
-             oninput="document.getElementById('scv').textContent=this.value">
-      <span id="scv">300</span>
-    </span>
-    <span class="slbl">Constriction
-      <input type="range" id="cnstr" min="0" max="100" value="0"
-             oninput="document.getElementById('cnv').textContent=this.value+'%'">
-      <span id="cnv">0%</span>
-    </span>
-    <span class="slbl">Speed
-      <input type="range" id="fspd" min="1" max="30" value="6"
-             oninput="document.getElementById('fspv').textContent=(this.value/10).toFixed(1)">
-      <span id="fspv">0.6</span>
-    </span>
+      <!-- Wind direction -->
+      <span style="font-size:9px;color:var(--lbl,#445)">Wind:</span>
+      <button class="dbtn act" data-fd="1,0,0">W→E</button>
+      <button class="dbtn"     data-fd="-1,0,0">E→W</button>
+      <button class="dbtn"     data-fd="0,0,1">S→N</button>
+      <button class="dbtn"     data-fd="0,0,-1">N→S</button>
 
-    <button id="run">▶ Run Simulation</button>
+      <div class="vsep"></div>
+
+      <span class="slbl">Streams
+        <input type="range" id="scount" min="80" max="500" value="300"
+               oninput="document.getElementById('scv').textContent=this.value">
+        <span id="scv">300</span>
+      </span>
+      <span class="slbl">Constriction
+        <input type="range" id="cnstr" min="0" max="100" value="0"
+               oninput="document.getElementById('cnv').textContent=this.value+'%'">
+        <span id="cnv">0%</span>
+      </span>
+      <span class="slbl">Speed
+        <input type="range" id="fspd" min="1" max="30" value="6"
+               oninput="document.getElementById('fspv').textContent=(this.value/10).toFixed(1)">
+        <span id="fspv">0.6</span>
+      </span>
+
+      <button id="run">▶ Run Simulation</button>
+    </div><!-- end wind-ctrls -->
+
+    <!-- Water controls (hidden until water tab) -->
+    <div id="water-ctrls" style="display:none;align-items:center;gap:5px;margin-left:auto;">
+      <span class="slbl">Wave Speed
+        <input type="range" id="wtr-speed" min="1" max="5" value="3">
+      </span>
+      <span class="slbl">Damping
+        <input type="range" id="wtr-damp" min="980" max="999" value="994">
+      </span>
+      <button class="pbtn" id="wtr-clear">Clear Waves</button>
+    </div>
   </div>
   <div id="st">Add objects in the main window, then click ▶ Run.</div>
 </div>
@@ -298,7 +317,7 @@ async function loadScene() {
   sceneObjs.forEach(m => scene.remove(m));
   sceneObjs = [];
 
-  const base = `${location.protocol}//${location.hostname}:${location.port || 9000}`;
+  const base = location.origin;
   const P = PRESETS[_preset];
 
   for (const obj of data) {
@@ -551,6 +570,127 @@ let _last = 0;
   renderer.render(scene, camera);
 })(0);
 
+// ── Water simulation ──────────────────────────────────────────────────────────
+const wc   = document.getElementById('wc');
+const wctx = wc.getContext('2d');
+const NW = 280, NH = 160;
+let wb0 = new Float32Array(NW*NH), wb1 = new Float32Array(NW*NH), wb2 = new Float32Array(NW*NH);
+let wsol = new Uint8Array(NW*NH);
+let _wraf = null, _wmode = false, _wdrag = false;
+
+function wResize() {
+  wc.width = innerWidth; wc.height = innerHeight - 56;
+  wc.style.top = '56px';
+}
+function wClear() { wb0.fill(0); wb1.fill(0); wb2.fill(0); }
+function wRipple(nx, ny, str) {
+  const cx=Math.floor(nx*NW), cy=Math.floor(ny*NH), r=5;
+  for (let y=Math.max(0,cy-r); y<=Math.min(NH-1,cy+r); y++)
+    for (let x=Math.max(0,cx-r); x<=Math.min(NW-1,cx+r); x++) {
+      if (wsol[y*NW+x]) continue;
+      const d=Math.sqrt((x-cx)**2+(y-cy)**2);
+      if (d<r) wb1[y*NW+x] += str*(1-d/r);
+    }
+}
+function wStep() {
+  const c2 = Math.pow(parseFloat(document.getElementById('wtr-speed')?.value||3)*0.085, 2);
+  const dp  = parseFloat(document.getElementById('wtr-damp')?.value||994)/1000;
+  for (let y=1; y<NH-1; y++) for (let x=1; x<NW-1; x++) {
+    const i=y*NW+x;
+    if (wsol[i]) { wb2[i]=0; continue; }
+    const lap=wb1[(y-1)*NW+x]+wb1[(y+1)*NW+x]+wb1[y*NW+x-1]+wb1[y*NW+x+1]-4*wb1[i];
+    wb2[i]=(2*wb1[i]-wb0[i]+c2*lap)*dp;
+  }
+  for (let x=0;x<NW;x++){wb2[x]=wb2[NW+x]*.5;wb2[(NH-1)*NW+x]=wb2[(NH-2)*NW+x]*.5;}
+  for (let y=0;y<NH;y++){wb2[y*NW]=wb2[y*NW+1]*.5;wb2[y*NW+NW-1]=wb2[y*NW+NW-2]*.5;}
+  const tmp=wb0; wb0=wb1; wb1=wb2; wb2=tmp;
+}
+function wDraw() {
+  const W=wc.width, H=wc.height;
+  const img=wctx.createImageData(W,H);
+  let vmax=0.005;
+  for (let i=0;i<NW*NH;i++){const v=Math.abs(wb1[i]);if(v>vmax)vmax=v;}
+  for (let py=0;py<H;py++) for (let px=0;px<W;px++) {
+    const gx=Math.floor(px*NW/W), gy=Math.floor(py*NH/H);
+    const i=gy*NW+gx, p=(py*W+px)*4;
+    if (wsol[i]) { img.data[p]=55;img.data[p+1]=48;img.data[p+2]=38;img.data[p+3]=255; }
+    else {
+      const h=Math.max(-1,Math.min(1,wb1[i]/vmax)), t=(h+1)*.5;
+      let r,g,b;
+      if (t<0.45){const s=t/.45;r=4+s*12|0;g=12+s*45|0;b=70+s*110|0;}
+      else if (t<0.55){r=16;g=57;b=180;}
+      else{const s=(t-.55)/.45;r=16+s*224|0;g=57+s*193|0;b=180+s*75|0;}
+      img.data[p]=r;img.data[p+1]=g;img.data[p+2]=b;img.data[p+3]=255;
+    }
+  }
+  wctx.putImageData(img,0,0);
+  // Draw obstacle outlines from scene
+  const raw=localStorage.getItem('cfd_sim_scene');
+  if (raw) {
+    const dat=JSON.parse(raw);
+    if (dat.length) {
+      let xmin=Infinity,xmax=-Infinity,zmin=Infinity,zmax=-Infinity;
+      dat.forEach(o=>{xmin=Math.min(xmin,o.bbox_cx-o.bbox_sx/2);xmax=Math.max(xmax,o.bbox_cx+o.bbox_sx/2);
+                      zmin=Math.min(zmin,o.bbox_cz-o.bbox_sz/2);zmax=Math.max(zmax,o.bbox_cz+o.bbox_sz/2);});
+      const xr=xmax-xmin||1, zr=zmax-zmin||1;
+      wctx.strokeStyle='rgba(210,180,90,.9)'; wctx.lineWidth=2;
+      dat.forEach(o=>{
+        const cx=((o.bbox_cx-xmin)/xr*.6+.2)*W, cy=((o.bbox_cz-zmin)/zr*.6+.2)*H;
+        const r=Math.max(10,Math.max(o.bbox_sx,o.bbox_sz)/(xr+zr)*.6*Math.min(W,H)*.5);
+        wctx.beginPath(); wctx.arc(cx,cy,r,0,Math.PI*2); wctx.stroke();
+      });
+    }
+  }
+}
+function wBuildSolid() {
+  wsol.fill(0);
+  const raw=localStorage.getItem('cfd_sim_scene'); if(!raw) return;
+  const dat=JSON.parse(raw); if(!dat.length) return;
+  let xmin=Infinity,xmax=-Infinity,zmin=Infinity,zmax=-Infinity;
+  dat.forEach(o=>{xmin=Math.min(xmin,o.bbox_cx-o.bbox_sx/2);xmax=Math.max(xmax,o.bbox_cx+o.bbox_sx/2);
+                  zmin=Math.min(zmin,o.bbox_cz-o.bbox_sz/2);zmax=Math.max(zmax,o.bbox_cz+o.bbox_sz/2);});
+  const xr=xmax-xmin||1, zr=zmax-zmin||1;
+  dat.forEach(o=>{
+    const cx=Math.floor(((o.bbox_cx-xmin)/xr*.6+.2)*NW);
+    const cy=Math.floor(((o.bbox_cz-zmin)/zr*.6+.2)*NH);
+    const r=Math.max(4,Math.ceil(Math.max(o.bbox_sx,o.bbox_sz)/(xr+zr)*.6*Math.min(NW,NH)*.5));
+    for(let y=Math.max(0,cy-r);y<=Math.min(NH-1,cy+r);y++)
+      for(let x=Math.max(0,cx-r);x<=Math.min(NW-1,cx+r);x++)
+        if((x-cx)**2+(y-cy)**2<=r*r) wsol[y*NW+x]=1;
+  });
+}
+function wStart() {
+  if (_wraf) return;
+  wResize(); wBuildSolid();
+  (function loop(){ for(let i=0;i<4;i++)wStep(); wDraw(); _wraf=requestAnimationFrame(loop); })();
+}
+function wStop() { if(_wraf){cancelAnimationFrame(_wraf);_wraf=null;} }
+
+// Mode switcher
+function switchMode(mode) {
+  _wmode = mode==='water';
+  document.getElementById('tab-wind').classList.toggle('act', !_wmode);
+  document.getElementById('tab-water').classList.toggle('act',  _wmode);
+  document.getElementById('c').style.display         = _wmode ? 'none'  : '';
+  document.getElementById('wc').style.display        = _wmode ? 'block' : 'none';
+  document.getElementById('wind-ctrls').style.display  = _wmode ? 'none'  : 'contents';
+  document.getElementById('water-ctrls').style.display = _wmode ? 'flex'  : 'none';
+  _wmode ? wStart() : wStop();
+}
+
+wc.addEventListener('click', e => {
+  const r=wc.getBoundingClientRect();
+  wRipple((e.clientX-r.left)/wc.width,(e.clientY-r.top)/wc.height,1.0);
+});
+wc.addEventListener('mousedown', ()=>_wdrag=true);
+wc.addEventListener('mouseup',   ()=>_wdrag=false);
+wc.addEventListener('mouseleave',()=>_wdrag=false);
+wc.addEventListener('mousemove', e=>{
+  if(!_wdrag) return;
+  const r=wc.getBoundingClientRect();
+  wRipple((e.clientX-r.left)/wc.width,(e.clientY-r.top)/wc.height,0.35);
+});
+
 // ── Events ────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.pbtn').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
 document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () => {
@@ -559,11 +699,15 @@ document.querySelectorAll('.dbtn').forEach(b => b.addEventListener('click', () =
   _flowDir = b.dataset.fd.split(',').map(Number);
 }));
 document.getElementById('run').addEventListener('click', runSim);
+document.getElementById('tab-wind').addEventListener('click', () => switchMode('wind'));
+document.getElementById('tab-water').addEventListener('click', () => switchMode('water'));
+document.getElementById('wtr-clear').addEventListener('click', () => { wClear(); wBuildSolid(); });
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   if (streamThick) streamThick.material.resolution.set(innerWidth, innerHeight);
+  if (_wmode) wResize();
 });
 
 function st(s) { document.getElementById('st').textContent = s; }
