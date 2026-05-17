@@ -3,491 +3,487 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Discreetize — CFD Mesh Engine</title>
+<title>Discreetize — CFD Mesh Engineering</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090b;--surface:#18181b;--surface2:#27272a;--border:#3f3f46;--border2:#27272a;
+  --text:#fafafa;--text2:#a1a1aa;--text3:#71717a;
+  --primary:#7c3aed;--primary-l:#a78bfa;--primary-g:rgba(124,58,237,.15);
+  --accent:#06b6d4;--accent-g:rgba(6,182,212,.15);
+  --glow:rgba(124,58,237,.4);--radius:8px;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 
-  :root {
-    --bg:       #09090b;
-    --surface:  #18181b;
-    --surface2: #27272a;
-    --border:   #3f3f46;
-    --border2:  #27272a;
-    --text:     #fafafa;
-    --text2:    #a1a1aa;
-    --text3:    #71717a;
-    --accent:   #6366f1;
-    --accent-h: #4f46e5;
-    --accent-g: rgba(99,102,241,.15);
-    --red:      #ef4444;
-    --green:    #22c55e;
-    --radius:   8px;
-  }
+/* ── Gradient orbs ── */
+.orb{position:fixed;border-radius:50%;filter:blur(100px);pointer-events:none;z-index:0;animation:drift 20s ease-in-out infinite}
+.orb-1{width:600px;height:600px;background:rgba(124,58,237,.12);top:-150px;left:-150px}
+.orb-2{width:500px;height:500px;background:rgba(6,182,212,.08);bottom:-100px;right:-100px;animation-delay:-8s;animation-duration:26s}
+@keyframes drift{0%,100%{transform:translate(0,0)}33%{transform:translate(60px,40px)}66%{transform:translate(-30px,70px)}}
 
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
-  }
+/* ── Grid bg ── */
+body::before{content:'';position:fixed;inset:0;z-index:0;background-image:linear-gradient(var(--border2) 1px,transparent 1px),linear-gradient(90deg,var(--border2) 1px,transparent 1px);background-size:40px 40px;opacity:.35;pointer-events:none}
 
-  /* ── Noise texture overlay ── */
-  body::before {
-    content: '';
-    position: fixed; inset: 0; z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none;
-  }
+/* ── Sticky nav ── */
+nav{position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border2);background:rgba(9,9,11,.85);backdrop-filter:blur(16px);padding:0 32px;height:62px;display:flex;align-items:center;gap:24px}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:700;font-size:16px;letter-spacing:-.3px}
+.logo-icon{width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 20px var(--glow)}
+.nav-links{display:flex;align-items:center;gap:4px;margin-left:8px}
+.nav-link{padding:5px 12px;border-radius:6px;color:var(--text2);font-size:13px;font-weight:500;text-decoration:none;background:none;border:none;cursor:pointer;transition:color .15s,background .15s}
+.nav-link:hover{color:var(--text);background:var(--surface2)}
+.nav-spacer{flex:1}
+.nav-cta{display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;text-decoration:none;border:none}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text2)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text);border-color:var(--border)}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;box-shadow:0 0 20px var(--glow)}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 4px 24px var(--glow)}
+.btn-lg{padding:11px 22px;font-size:14px}
 
-  /* ── Gradient blobs ── */
-  .blob {
-    position: fixed; border-radius: 50%; filter: blur(120px);
-    pointer-events: none; z-index: 0;
-  }
-  .blob-1 { width: 500px; height: 500px; background: rgba(99,102,241,.12); top: -100px; left: -100px; }
-  .blob-2 { width: 400px; height: 400px; background: rgba(168,85,247,.08); bottom: -80px; right: -80px; }
+/* ── Sections ── */
+section,.page-wrap{position:relative;z-index:1}
+.page-wrap{min-height:100vh}
 
-  /* ── Layout ── */
-  .page {
-    position: relative; z-index: 1;
-    min-height: 100vh;
-    display: flex; flex-direction: column;
-  }
+/* ── Hero ── */
+.hero{min-height:90vh;display:flex;align-items:center;padding:80px 32px}
+.hero-inner{max-width:1100px;margin:0 auto;width:100%;display:grid;grid-template-columns:1.1fr 1fr;gap:64px;align-items:center}
+.hero-badge{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:11px;font-weight:500;color:var(--text2);margin-bottom:22px}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse-dot 2s ease-in-out infinite}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.hero h1{font-size:58px;font-weight:800;line-height:1.05;letter-spacing:-.04em;margin-bottom:20px}
+.text-gradient{background:linear-gradient(135deg,#fff 30%,var(--primary-l) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:16px;line-height:1.75;color:var(--text2);max-width:460px;margin-bottom:36px}
+.hero-btns{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+.hero-note{font-size:11px;color:var(--text3)}
+.hero-visual{position:relative;display:flex;align-items:center;justify-content:center}
+.mesh-canvas-wrap{position:relative;width:100%;aspect-ratio:1;max-width:400px;margin:0 auto}
+canvas.mesh-preview{width:100%;height:100%;border-radius:12px;border:1px solid var(--border2)}
+.mesh-glow{position:absolute;inset:-20px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.2) 0%,transparent 70%);animation:glow-pulse 3s ease-in-out infinite}
+@keyframes glow-pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
-  /* ── Navbar ── */
-  nav {
-    display: flex; align-items: center;
-    padding: 0 32px; height: 60px;
-    border-bottom: 1px solid var(--border2);
-    background: rgba(9,9,11,.8);
-    backdrop-filter: blur(12px);
-    position: sticky; top: 0; z-index: 100;
-  }
-  .nav-logo {
-    display: flex; align-items: center; gap: 8px;
-    font-weight: 700; font-size: 16px; color: var(--text);
-    text-decoration: none;
-  }
-  .nav-logo-icon {
-    width: 28px; height: 28px; border-radius: 6px;
-    background: var(--accent);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-  }
-  .nav-spacer { flex: 1; }
-  .nav-links { display: flex; align-items: center; gap: 6px; }
-  .nav-link {
-    padding: 6px 12px; border-radius: var(--radius);
-    color: var(--text2); font-size: 13px; font-weight: 500;
-    text-decoration: none; background: transparent; border: none; cursor: pointer;
-    transition: color 0.15s, background 0.15s;
-  }
-  .nav-link:hover { color: var(--text); background: var(--surface2); }
+/* ── Stats ── */
+.stats{max-width:1100px;margin:0 auto;padding:0 32px 60px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px;z-index:1;position:relative}
+.stat{text-align:center}
+.stat-val{font-size:28px;font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--text) 30%,var(--primary-l));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.15em;color:var(--text3);margin-top:4px}
 
-  /* ── Main split layout ── */
-  main {
-    flex: 1; display: flex; align-items: center;
-    padding: 48px 32px;
-    max-width: 1100px; margin: 0 auto; width: 100%;
-    gap: 64px;
-  }
+/* ── Marquee ── */
+.marquee-section{border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);background:var(--surface)/50%;padding:14px 0;overflow:hidden;z-index:1;position:relative}
+.marquee-track{display:flex;width:max-content;animation:marquee 28s linear infinite}
+.marquee-item{display:flex;align-items:center;gap:8px;padding:0 28px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
+.marquee-dot{width:5px;height:5px;border-radius:50%;background:var(--primary)}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
-  /* ── Left: Hero copy ── */
-  .hero { flex: 1; min-width: 0; }
-  .hero-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 20px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    font-size: 11px; font-weight: 500; color: var(--text2);
-    margin-bottom: 24px;
-  }
-  .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
-  .hero h1 {
-    font-size: 48px; font-weight: 700; line-height: 1.1;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, #fff 40%, #a78bfa 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 20px;
-  }
-  .hero p {
-    font-size: 16px; line-height: 1.7; color: var(--text2);
-    max-width: 440px; margin-bottom: 36px;
-  }
-  .features { display: flex; flex-direction: column; gap: 14px; }
-  .feature {
-    display: flex; align-items: flex-start; gap: 12px;
-  }
-  .feature-icon {
-    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
-    background: var(--accent-g); border: 1px solid rgba(99,102,241,.3);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; margin-top: 1px;
-  }
-  .feature-text strong {
-    display: block; font-size: 13px; font-weight: 600; color: var(--text);
-    margin-bottom: 2px;
-  }
-  .feature-text span { font-size: 12px; color: var(--text3); line-height: 1.5; }
+/* ── Features ── */
+.features-section{padding:96px 32px;z-index:1;position:relative}
+.section-inner{max-width:1100px;margin:0 auto}
+.section-label{font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:var(--primary-l);margin-bottom:14px}
+.section-title{font-size:36px;font-weight:800;letter-spacing:-.03em;max-width:520px;margin-bottom:60px}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feature-card{border:1px solid var(--border2);background:var(--surface);border-radius:12px;padding:24px;transition:border-color .2s,transform .2s;position:relative;overflow:hidden}
+.feature-card::after{content:'';position:absolute;top:-40px;right:-40px;width:100px;height:100px;border-radius:50%;background:var(--primary-g);opacity:0;transition:opacity .3s;filter:blur(20px)}
+.feature-card:hover{border-color:rgba(124,58,237,.4);transform:translateY(-3px)}
+.feature-card:hover::after{opacity:1}
+.feature-icon{width:38px;height:38px;border-radius:9px;background:var(--primary-g);border:1px solid rgba(124,58,237,.2);display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:16px}
+.feature-title{font-size:14px;font-weight:700;margin-bottom:8px}
+.feature-desc{font-size:12px;line-height:1.6;color:var(--text3)}
 
-  /* ── Right: Auth card ── */
-  .auth-card {
-    width: 380px; flex-shrink: 0;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 32px;
-    box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 24px 48px rgba(0,0,0,.5);
-  }
-  .auth-header { margin-bottom: 28px; }
-  .auth-header h2 {
-    font-size: 22px; font-weight: 700; color: var(--text);
-    margin-bottom: 6px;
-  }
-  .auth-header p { font-size: 13px; color: var(--text2); }
+/* ── Terminal ── */
+.terminal-section{padding:0 32px 96px;z-index:1;position:relative}
+.terminal{max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.terminal-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border2)}
+.dot{width:11px;height:11px;border-radius:50%}
+.dot-r{background:#ef4444}
+.dot-y{background:#f59e0b}
+.dot-g{background:#22c55e}
+.terminal-label{margin-left:8px;font-size:11px;color:var(--text3)}
+.terminal-body{padding:20px 24px;font-family:monospace;font-size:13px;line-height:1.85}
+.t-cmd{color:var(--text)}
+.t-dim{color:var(--text3)}
+.t-success{color:#22c55e}
+.t-accent{color:var(--accent)}
 
-  /* Tab switcher */
-  .tab-bar {
-    display: flex; background: var(--surface2); border-radius: 8px;
-    padding: 3px; margin-bottom: 24px;
-  }
-  .tab-btn {
-    flex: 1; padding: 7px 12px; border-radius: 6px;
-    font-size: 13px; font-weight: 500; cursor: pointer;
-    border: none; background: transparent; color: var(--text3);
-    transition: all 0.15s;
-  }
-  .tab-btn.active {
-    background: var(--bg); color: var(--text);
-    box-shadow: 0 1px 4px rgba(0,0,0,.4);
-  }
+/* ── CTA ── */
+.cta-section{padding:96px 32px;text-align:center;z-index:1;position:relative}
+.cta-glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.12) 0%,transparent 65%);animation:glow-pulse 5s ease-in-out infinite}
+.cta-section h2{font-size:42px;font-weight:800;letter-spacing:-.04em;max-width:600px;margin:0 auto 16px;position:relative}
+.cta-section p{color:var(--text2);font-size:15px;max-width:440px;margin:0 auto 36px;position:relative}
+.cta-btns{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;position:relative}
 
-  /* Form */
-  .form-group { margin-bottom: 16px; }
-  label {
-    display: block; font-size: 12px; font-weight: 500;
-    color: var(--text2); margin-bottom: 6px;
-  }
-  input[type="email"],
-  input[type="password"],
-  input[type="text"] {
-    width: 100%; padding: 9px 12px;
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius); color: var(--text);
-    font-size: 14px; font-family: inherit;
-    outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-g);
-  }
-  input::placeholder { color: var(--text3); }
-  input.error { border-color: var(--red); }
+/* ── Footer ── */
+footer{border-top:1px solid var(--border2);padding:24px 32px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text3);z-index:1;position:relative}
 
-  .form-error {
-    font-size: 11px; color: var(--red); margin-top: 4px;
-    display: none;
-  }
-  .form-error.show { display: block; }
+/* ── Auth overlay ── */
+#auth-overlay{position:fixed;inset:0;z-index:200;background:rgba(9,9,11,.85);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+#auth-overlay.open{opacity:1;pointer-events:auto}
+.auth-modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:400px;padding:32px;box-shadow:0 24px 64px rgba(0,0,0,.6);transform:translateY(20px);transition:transform .2s}
+#auth-overlay.open .auth-modal{transform:translateY(0)}
+.auth-modal h2{font-size:22px;font-weight:700;margin-bottom:6px}
+.auth-modal .sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+.tab-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:22px}
+.tab-btn{flex:1;padding:7px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--text3);font-family:inherit;transition:all .15s}
+.tab-btn.active{background:var(--bg);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.form-group{margin-bottom:15px}
+.form-group label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.form-group input{width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.form-group input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-g)}
+.form-group input::placeholder{color:var(--text3)}
+.btn-submit{width:100%;padding:10px;background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:6px;transition:opacity .15s,transform .1s}
+.btn-submit:hover:not(:disabled){opacity:.9}
+.btn-submit:active:not(:disabled){transform:scale(.99)}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed}
+.auth-alert{padding:10px 14px;border-radius:var(--radius);font-size:12px;margin-bottom:14px;display:none;gap:8px}
+.auth-alert.show{display:flex}
+.auth-alert.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+.auth-alert.success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac}
+.auth-switch{text-align:center;font-size:12px;color:var(--text3);margin-top:16px}
+.auth-switch button{background:none;border:none;color:var(--primary-l);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;padding:0}
+.close-btn{position:absolute;top:16px;right:16px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text2);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.close-btn:hover{color:var(--text);background:var(--border)}
+.auth-modal{position:relative}
 
-  .btn-primary {
-    width: 100%; padding: 10px 16px;
-    background: var(--accent); color: #fff;
-    border: none; border-radius: var(--radius);
-    font-size: 14px; font-weight: 600; font-family: inherit;
-    cursor: pointer; transition: background 0.15s, transform 0.1s, opacity 0.15s;
-    margin-top: 4px;
-  }
-  .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
-  .btn-primary:active:not(:disabled) { transform: scale(0.99); }
-  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-  .btn-primary.loading::after {
-    content: '';
-    display: inline-block; width: 12px; height: 12px;
-    border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
-    border-radius: 50%; animation: spin .6s linear infinite;
-    margin-left: 8px; vertical-align: -2px;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .divider {
-    display: flex; align-items: center; gap: 12px;
-    margin: 20px 0; color: var(--text3); font-size: 11px;
-  }
-  .divider::before, .divider::after {
-    content: ''; flex: 1; height: 1px; background: var(--border2);
-  }
-
-  .auth-switch {
-    text-align: center; font-size: 12px; color: var(--text3); margin-top: 18px;
-  }
-  .auth-switch button {
-    background: none; border: none; color: var(--accent);
-    font-size: 12px; font-weight: 500; cursor: pointer;
-    font-family: inherit; padding: 0;
-  }
-  .auth-switch button:hover { color: var(--accent-h); text-decoration: underline; }
-
-  /* Alert banner */
-  .alert {
-    padding: 10px 14px; border-radius: var(--radius);
-    font-size: 12px; margin-bottom: 16px;
-    display: none; align-items: flex-start; gap: 8px;
-  }
-  .alert.show { display: flex; }
-  .alert.error { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); color: #fca5a5; }
-  .alert.success { background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.3); color: #86efac; }
-
-  /* ── Footer ── */
-  footer {
-    border-top: 1px solid var(--border2);
-    padding: 20px 32px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; color: var(--text3);
-    position: relative; z-index: 1;
-  }
-
-  /* ── Responsive ── */
-  @media (max-width: 768px) {
-    main { flex-direction: column; padding: 32px 20px; gap: 40px; }
-    .hero h1 { font-size: 34px; }
-    .auth-card { width: 100%; }
-    nav { padding: 0 20px; }
-  }
+/* ── Responsive ── */
+@media(max-width:900px){
+  .hero-inner{grid-template-columns:1fr;gap:40px}
+  .hero h1{font-size:40px}
+  .hero-visual{display:none}
+  .feature-grid{grid-template-columns:1fr 1fr}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  nav{padding:0 20px}
+}
+@media(max-width:600px){
+  .feature-grid{grid-template-columns:1fr}
+  .stats{grid-template-columns:1fr 1fr}
+  .hero{padding:60px 20px}
+  .features-section,.terminal-section,.cta-section{padding-left:20px;padding-right:20px}
+}
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="blob blob-1"></div>
-  <div class="blob blob-2"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
 
-  <nav>
-    <a class="nav-logo" href="/">
-      <div class="nav-logo-icon">⬡</div>
-      Discreetize
-    </a>
-    <div class="nav-spacer"></div>
-    <div class="nav-links">
-      <a class="nav-link" href="/app">Open App</a>
-    </div>
-  </nav>
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="logo-icon">⬡</div>
+    Discreetize
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="#features">Features</a>
+    <a class="nav-link" href="#pipeline">Pipeline</a>
+  </div>
+  <div class="nav-spacer"></div>
+  <div class="nav-cta">
+    <button class="btn btn-ghost" onclick="openAuth('in')">Sign in</button>
+    <button class="btn btn-primary" onclick="openAuth('up')">Get started free →</button>
+  </div>
+</nav>
 
-  <main>
-    <!-- Left: product copy -->
-    <div class="hero">
+<div class="page-wrap">
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
       <div class="hero-badge">
-        <span class="hero-badge-dot"></span>
-        Now in beta
+        <span class="badge-dot"></span>
+        v2.0 — CFD-grade mesh pipeline, now in the browser
       </div>
-      <h1>CFD Mesh<br/>Engineering</h1>
-      <p>Professional computational fluid dynamics mesh generation. Upload geometry, configure boundary layers, and run simulation — all in your browser.</p>
-
-      <div class="features">
-        <div class="feature">
-          <div class="feature-icon">⬡</div>
-          <div class="feature-text">
-            <strong>Tet + BL Meshing</strong>
-            <span>Automatic tetrahedral volume mesh with boundary layer inflation</span>
-          </div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">◈</div>
-          <div class="feature-text">
-            <strong>Surface Analysis</strong>
-            <span>Curvature heatmaps, mesh quality scoring, face selection</span>
-          </div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">⬠</div>
-          <div class="feature-text">
-            <strong>Boolean Ops &amp; Export</strong>
-            <span>Union, subtract, intersect — export STL, OBJ, PLY, VTU</span>
-          </div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">⟳</div>
-          <div class="feature-text">
-            <strong>Live CFD Flow</strong>
-            <span>2D Lattice-Boltzmann simulation with real-time velocity field</span>
-          </div>
-        </div>
+      <h1>Mesh processing<br/>at <span class="text-gradient">C++ speed.</span></h1>
+      <p>Heal broken STLs, generate boundary-layer CFD meshes, run curvature analysis and export to STL/OBJ/PLY — all from a single, blistering-fast C++ engine engineers actually trust.</p>
+      <div class="hero-btns">
+        <button class="btn btn-primary btn-lg" onclick="openAuth('up')">Try the workbench →</button>
+        <a class="btn btn-ghost btn-lg" href="#features">See features</a>
+      </div>
+      <div class="hero-note">No credit card required · 3 free imports</div>
+    </div>
+    <div class="hero-visual">
+      <div class="mesh-canvas-wrap">
+        <div class="mesh-glow"></div>
+        <canvas class="mesh-preview" id="mesh-canvas"></canvas>
       </div>
     </div>
+  </div>
+</section>
 
-    <!-- Right: auth card -->
-    <div class="auth-card">
-      <div class="auth-header">
-        <h2 id="auth-title">Create account</h2>
-        <p id="auth-sub">Sign up to start meshing</p>
-      </div>
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="stat-val">218ms</div><div class="stat-label">Heal · 1.2M faces</div></div>
+  <div class="stat"><div class="stat-val">14×</div><div class="stat-label">vs. Python tools</div></div>
+  <div class="stat"><div class="stat-val">5</div><div class="stat-label">Export formats</div></div>
+  <div class="stat"><div class="stat-val">0</div><div class="stat-label">GC pauses</div></div>
+</div>
 
-      <div class="tab-bar">
-        <button class="tab-btn active" id="tab-signup" onclick="showTab('signup')">Sign Up</button>
-        <button class="tab-btn" id="tab-signin" onclick="showTab('signin')">Sign In</button>
-      </div>
+<!-- MARQUEE -->
+<div class="marquee-section">
+  <div class="marquee-track" id="marquee">
+    <!-- filled by JS -->
+  </div>
+</div>
 
-      <div id="alert-box" class="alert"></div>
-
-      <!-- Sign-up form -->
-      <form id="form-signup" onsubmit="handleSignup(event)">
-        <div class="form-group">
-          <label for="su-email">Email address</label>
-          <input type="email" id="su-email" placeholder="you@example.com" required autocomplete="email"/>
-        </div>
-        <div class="form-group">
-          <label for="su-pw">Password</label>
-          <input type="password" id="su-pw" placeholder="At least 8 characters" required minlength="8" autocomplete="new-password"/>
-        </div>
-        <div class="form-group">
-          <label for="su-pw2">Confirm password</label>
-          <input type="password" id="su-pw2" placeholder="Repeat password" required autocomplete="new-password"/>
-          <div class="form-error" id="pw-match-err">Passwords do not match</div>
-        </div>
-        <button type="submit" class="btn-primary" id="btn-signup">Create account</button>
-      </form>
-
-      <!-- Sign-in form -->
-      <form id="form-signin" style="display:none;" onsubmit="handleSignin(event)">
-        <div class="form-group">
-          <label for="si-email">Email address</label>
-          <input type="email" id="si-email" placeholder="you@example.com" required autocomplete="email"/>
-        </div>
-        <div class="form-group">
-          <label for="si-pw">Password</label>
-          <input type="password" id="si-pw" placeholder="Your password" required autocomplete="current-password"/>
-        </div>
-        <button type="submit" class="btn-primary" id="btn-signin">Sign in</button>
-      </form>
-
-      <div class="auth-switch" id="auth-switch-text">
-        Already have an account?
-        <button onclick="showTab('signin')">Sign in</button>
-      </div>
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="section-inner">
+    <div class="section-label">Capabilities</div>
+    <h2 class="section-title">The full mesh pipeline,<br/>in one engine.</h2>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="feature-icon">⬡</div><div class="feature-title">Tet + BL Meshing</div><div class="feature-desc">Automatic tetrahedral volume mesh with boundary layer inflation for CFD-grade surface resolution.</div></div>
+      <div class="feature-card"><div class="feature-icon">⚒</div><div class="feature-title">Manifold Healing</div><div class="feature-desc">Merge duplicate vertices, fix winding, fill holes — turn broken scans into watertight geometry.</div></div>
+      <div class="feature-card"><div class="feature-icon">◈</div><div class="feature-title">Curvature Analysis</div><div class="feature-desc">Per-vertex mean curvature heatmaps for surface inspection and CFD mesh quality scoring.</div></div>
+      <div class="feature-card"><div class="feature-icon">⟳</div><div class="feature-title">Live CFD Simulation</div><div class="feature-desc">2D Lattice-Boltzmann flow simulation with real-time velocity field visualization in the browser.</div></div>
+      <div class="feature-card"><div class="feature-icon">✂</div><div class="feature-title">Z-Plane Slicer</div><div class="feature-desc">Generate clean polyline contours and SVG cross-sections at any height — CNC and 3D-print ready.</div></div>
+      <div class="feature-card"><div class="feature-icon">↗</div><div class="feature-title">Multi-format Export</div><div class="feature-desc">STL binary/ASCII, OBJ, PLY, VTU — export to any downstream simulation or printing tool.</div></div>
     </div>
-  </main>
+  </div>
+</section>
 
-  <footer>
-    &copy; 2026 Discreetize — Professional CFD Meshing
-  </footer>
+<!-- TERMINAL -->
+<section class="terminal-section" id="pipeline">
+  <div class="section-inner" style="text-align:center;margin-bottom:40px">
+    <div class="section-label">Pipeline</div>
+    <h2 class="section-title" style="margin:0 auto 0;max-width:560px">From raw scan to simulation-ready mesh.</h2>
+  </div>
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      <span class="terminal-label">~/projects · discreetize</span>
+    </div>
+    <div class="terminal-body" id="terminal-body"></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-glow"></div>
+  <h2>Stop fighting<br/>your mesh tools.</h2>
+  <p>Three free imports to get started. Upgrade when you're ready. No credit card required.</p>
+  <div class="cta-btns">
+    <button class="btn btn-primary btn-lg" onclick="openAuth('up')">Get started free →</button>
+    <button class="btn btn-ghost btn-lg" onclick="openAuth('in')">Sign in</button>
+  </div>
+</section>
+
+</div><!-- page-wrap -->
+
+<footer>
+  <span>© 2026 Discreetize — Professional CFD Meshing</span>
+  <span>Built in C++ for engineers</span>
+</footer>
+
+<!-- AUTH OVERLAY -->
+<div id="auth-overlay" onclick="overlayClick(event)">
+  <div class="auth-modal">
+    <button class="close-btn" onclick="closeAuth()">✕</button>
+    <h2 id="auth-title">Create account</h2>
+    <div class="sub" id="auth-sub">Sign up to start meshing</div>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-up" onclick="setTab('up')">Sign Up</button>
+      <button class="tab-btn" id="tab-in" onclick="setTab('in')">Sign In</button>
+    </div>
+    <div id="auth-alert" class="auth-alert"></div>
+    <form id="auth-form" onsubmit="submitAuth(event)">
+      <div class="form-group" id="fg-name" style="display:none">
+        <label>Name</label>
+        <input type="text" id="f-name" placeholder="Ada Lovelace" autocomplete="name"/>
+      </div>
+      <div class="form-group">
+        <label>Email address</label>
+        <input type="email" id="f-email" placeholder="you@example.com" required autocomplete="email"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="f-pw" placeholder="••••••••" required autocomplete="current-password"/>
+      </div>
+      <div class="form-group" id="fg-pw2" style="display:none">
+        <label>Confirm password</label>
+        <input type="password" id="f-pw2" placeholder="Repeat password" autocomplete="new-password"/>
+      </div>
+      <button type="submit" class="btn-submit" id="btn-submit">Create account</button>
+    </form>
+    <div class="auth-switch" id="auth-switch"></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-(async function () {
-  // ── Load config from server ──────────────────────────────────────
-  let supabase = null;
-  try {
-    const cfg = await fetch('/api/config').then(r => r.json());
-    if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
-      supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+// ── Marquee ──────────────────────────────────────────────────────
+const TAGS = ['STL','OBJ','PLY','STEP','BVH ACCEL','ZERO-COPY','MULTI-THREADED','CFD-READY','MANIFOLD','WATERTIGHT','TET MESH','BL INFLATION'];
+const track = document.getElementById('marquee');
+const row = TAGS.map(t=>`<span class="marquee-item"><span class="marquee-dot"></span>${t}</span>`).join('');
+track.innerHTML = row + row; // duplicate for seamless loop
+
+// ── Animated terminal ────────────────────────────────────────────
+const LINES = [
+  {cls:'t-cmd',  text:'$ discreetize heal turbine.stl -o fixed.stl', delay:200},
+  {cls:'t-dim',  text:'  [25%] Loading STL ... 1,284,902 faces',     delay:600},
+  {cls:'t-dim',  text:'  [60%] Merging duplicate vertices',           delay:1000},
+  {cls:'t-dim',  text:'  [85%] Repairing manifold edges',             delay:1400},
+  {cls:'t-accent',text:'  Watertight: YES',                           delay:1800},
+  {cls:'t-success',text:'  ✓ Saved: fixed.stl  (218 ms)',            delay:2200},
+  {cls:'t-cmd',  text:'',                                             delay:2800},
+  {cls:'t-cmd',  text:'$ discreetize mesh fixed.stl --bl-layers=6',  delay:3000},
+  {cls:'t-dim',  text:'  Generating BL inflation ...',                delay:3400},
+  {cls:'t-success',text:'  ✓ Mesh: 48,210 nodes  3,721 prisms  (0.8s)',delay:3900},
+];
+const tb = document.getElementById('terminal-body');
+let obs = new IntersectionObserver(entries => {
+  if (!entries[0].isIntersecting) return;
+  obs.disconnect();
+  LINES.forEach(l => {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = l.cls;
+      el.textContent = l.text || ' ';
+      tb.appendChild(el);
+    }, l.delay);
+  });
+}, {threshold:0.3});
+obs.observe(tb);
+
+// ── Animated mesh canvas ─────────────────────────────────────────
+(function(){
+  const c = document.getElementById('mesh-canvas');
+  if (!c) return;
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  function resize(){ c.width=c.offsetWidth*dpr; c.height=c.offsetHeight*dpr; }
+  resize();
+  const ctx = c.getContext('2d');
+  const W=()=>c.width, H=()=>c.height;
+
+  // Build icosphere-ish wireframe
+  const verts=[], edges=[];
+  const N=5;
+  for(let i=0;i<=N;i++){
+    const lat=(i/N-0.5)*Math.PI;
+    const r=Math.cos(lat); const y=Math.sin(lat);
+    const m=Math.max(4,Math.round(r*12));
+    for(let j=0;j<m;j++){
+      const lon=j/m*Math.PI*2;
+      verts.push([r*Math.cos(lon),y,r*Math.sin(lon)]);
     }
-  } catch (e) {
-    console.warn('Could not load Supabase config:', e);
   }
-
-  // ── If already signed in, go straight to app ────────────────────
-  if (supabase) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      window.location.replace('/app');
-      return;
+  // rough edges
+  for(let i=0;i<verts.length;i++)
+    for(let j=i+1;j<verts.length;j++){
+      const d=Math.hypot(verts[i][0]-verts[j][0],verts[i][1]-verts[j][1],verts[i][2]-verts[j][2]);
+      if(d<0.65) edges.push([i,j]);
     }
+
+  let t=0;
+  function draw(){
+    ctx.clearRect(0,0,W(),H());
+    const cx=W()/2, cy=H()/2, sc=W()*0.36;
+    const ax=Math.sin(t*0.4)*0.3, ay=t*0.25;
+    const cosX=Math.cos(ax),sinX=Math.sin(ax),cosY=Math.cos(ay),sinY=Math.sin(ay);
+    const proj=([x,y,z])=>{
+      let x2=x*cosY+z*sinY, z2=-x*sinY+z*cosY;
+      let y2=y*cosX-z2*sinX;  z2=y*sinX+z2*cosX;
+      const s=1/(1+z2*0.3); return [cx+x2*sc*s,cy-y2*sc*s,z2];
+    };
+    const ps=verts.map(v=>proj(v));
+    edges.forEach(([a,b])=>{
+      const [ax,ay,az]=ps[a],[bx,by,bz]=ps[b];
+      const dep=(az+bz)/2;
+      const alpha=Math.max(0.05,Math.min(0.6,(dep+1)*0.3));
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);
+      ctx.strokeStyle=`rgba(167,139,250,${alpha})`;ctx.lineWidth=dpr*0.6;ctx.stroke();
+    });
+    t+=0.005;
+    requestAnimationFrame(draw);
   }
-
-  // ── Tab switching ────────────────────────────────────────────────
-  window.showTab = function(tab) {
-    const isSignup = tab === 'signup';
-    document.getElementById('form-signup').style.display = isSignup ? '' : 'none';
-    document.getElementById('form-signin').style.display = isSignup ? 'none' : '';
-    document.getElementById('tab-signup').classList.toggle('active', isSignup);
-    document.getElementById('tab-signin').classList.toggle('active', !isSignup);
-    document.getElementById('auth-title').textContent = isSignup ? 'Create account' : 'Welcome back';
-    document.getElementById('auth-sub').textContent   = isSignup ? 'Sign up to start meshing' : 'Sign in to your account';
-    document.getElementById('auth-switch-text').innerHTML = isSignup
-      ? 'Already have an account? <button onclick="showTab(\'signin\')">Sign in</button>'
-      : 'Don\'t have an account? <button onclick="showTab(\'signup\')">Sign up</button>';
-    clearAlert();
-  };
-
-  // ── Alert helpers ────────────────────────────────────────────────
-  function showAlert(msg, type) {
-    const el = document.getElementById('alert-box');
-    el.textContent = msg;
-    el.className = 'alert show ' + type;
-  }
-  function clearAlert() {
-    const el = document.getElementById('alert-box');
-    el.className = 'alert';
-  }
-
-  function setLoading(btnId, on) {
-    const btn = document.getElementById(btnId);
-    btn.disabled = on;
-    btn.classList.toggle('loading', on);
-    btn.textContent = on ? '' : (btnId === 'btn-signup' ? 'Create account' : 'Sign in');
-  }
-
-  // ── Sign-up ──────────────────────────────────────────────────────
-  window.handleSignup = async function(e) {
-    e.preventDefault();
-    clearAlert();
-    const email = document.getElementById('su-email').value.trim();
-    const pw    = document.getElementById('su-pw').value;
-    const pw2   = document.getElementById('su-pw2').value;
-    const errEl = document.getElementById('pw-match-err');
-
-    if (pw !== pw2) {
-      errEl.classList.add('show');
-      document.getElementById('su-pw2').classList.add('error');
-      return;
-    }
-    errEl.classList.remove('show');
-    document.getElementById('su-pw2').classList.remove('error');
-
-    if (!supabase) { showAlert('Authentication not configured — contact admin.', 'error'); return; }
-
-    setLoading('btn-signup', true);
-    const { data, error } = await supabase.auth.signUp({ email, password: pw });
-    setLoading('btn-signup', false);
-
-    if (error) {
-      showAlert(error.message, 'error');
-    } else if (data.user && !data.session) {
-      // Email confirmation required
-      showAlert('Check your email — we sent you a confirmation link.', 'success');
-    } else {
-      window.location.replace('/app');
-    }
-  };
-
-  // ── Sign-in ──────────────────────────────────────────────────────
-  window.handleSignin = async function(e) {
-    e.preventDefault();
-    clearAlert();
-    const email = document.getElementById('si-email').value.trim();
-    const pw    = document.getElementById('si-pw').value;
-
-    if (!supabase) { showAlert('Authentication not configured — contact admin.', 'error'); return; }
-
-    setLoading('btn-signin', true);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pw });
-    setLoading('btn-signin', false);
-
-    if (error) {
-      showAlert(error.message, 'error');
-    } else {
-      window.location.replace('/app');
-    }
-  };
-
+  window.addEventListener('resize',resize);
+  draw();
 })();
+
+// ── Auth ─────────────────────────────────────────────────────────
+let sb=null, curTab='up';
+(async()=>{
+  try{
+    const cfg=await fetch('/api/config').then(r=>r.json());
+    if(cfg.supabaseUrl&&cfg.supabaseAnonKey){
+      sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
+      const {data:{session}}=await sb.auth.getSession();
+      if(session) window.location.replace('/app');
+    }
+  }catch(e){console.warn('Supabase config error',e);}
+})();
+
+window.openAuth=function(tab){
+  setTab(tab||'up');
+  document.getElementById('auth-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('f-email').focus(),100);
+};
+window.closeAuth=function(){
+  document.getElementById('auth-overlay').classList.remove('open');
+  clearAlert();
+};
+window.overlayClick=function(e){
+  if(e.target===document.getElementById('auth-overlay')) closeAuth();
+};
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAuth(); });
+
+window.setTab=function(tab){
+  curTab=tab;
+  const isUp=tab==='up';
+  document.getElementById('tab-up').classList.toggle('active',isUp);
+  document.getElementById('tab-in').classList.toggle('active',!isUp);
+  document.getElementById('auth-title').textContent=isUp?'Create account':'Welcome back';
+  document.getElementById('auth-sub').textContent=isUp?'Sign up to start meshing':'Sign in to your account';
+  document.getElementById('fg-name').style.display=isUp?'':'none';
+  document.getElementById('fg-pw2').style.display=isUp?'':'none';
+  document.getElementById('btn-submit').textContent=isUp?'Create account':'Sign in';
+  document.getElementById('f-pw').autocomplete=isUp?'new-password':'current-password';
+  document.getElementById('auth-switch').innerHTML=isUp
+    ?'Already have an account? <button onclick="setTab(\'in\')">Sign in</button>'
+    :'Don\'t have an account? <button onclick="setTab(\'up\')">Sign up</button>';
+  clearAlert();
+};
+setTab('up');
+
+function showAlert(msg,type){
+  const el=document.getElementById('auth-alert');
+  el.textContent=msg; el.className='auth-alert show '+type;
+}
+function clearAlert(){ document.getElementById('auth-alert').className='auth-alert'; }
+
+window.submitAuth=async function(e){
+  e.preventDefault(); clearAlert();
+  const email=document.getElementById('f-email').value.trim();
+  const pw=document.getElementById('f-pw').value;
+  const btn=document.getElementById('btn-submit');
+  if(!sb){ showAlert('Auth not configured — contact admin.','error'); return; }
+  if(curTab==='up'){
+    const pw2=document.getElementById('f-pw2').value;
+    if(pw!==pw2){ showAlert('Passwords do not match.','error'); return; }
+    if(pw.length<8){ showAlert('Password must be at least 8 characters.','error'); return; }
+  }
+  btn.disabled=true; btn.textContent='…';
+  try{
+    if(curTab==='in'){
+      const {error}=await sb.auth.signInWithPassword({email,password:pw});
+      if(error) throw error;
+      window.location.replace('/app');
+    } else {
+      const name=document.getElementById('f-name').value.trim()||email.split('@')[0];
+      const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{name}}});
+      if(error) throw error;
+      if(data.user&&!data.session){
+        showAlert('Check your email for a confirmation link.','success');
+      } else {
+        window.location.replace('/app');
+      }
+    }
+  }catch(err){
+    showAlert(err.message||'Something went wrong.','error');
+  }finally{
+    btn.disabled=false;
+    btn.textContent=curTab==='up'?'Create account':'Sign in';
+  }
+};
 </script>
 </body>
 </html>
