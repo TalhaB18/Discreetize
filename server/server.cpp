@@ -5,6 +5,7 @@
 //       server/server.cpp -o cfd_server -lpthread
 // =============================================================================
 
+#include <curl/curl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -461,6 +462,64 @@ static std::string json_string_value(const std::string& json, const std::string&
         }
     }
     return val;
+}
+
+// Extract raw JSON array (as string) for a given key — bracket-balanced, string-aware.
+static std::string json_array_raw(const std::string& s, const std::string& key) {
+    std::string k = "\"" + key + "\"";
+    auto pos = s.find(k);
+    if (pos == std::string::npos) return "[]";
+    pos = s.find('[', pos + k.size());
+    if (pos == std::string::npos) return "[]";
+    int depth = 0;
+    bool in_str = false;
+    char prev = 0;
+    size_t start = pos;
+    for (size_t i = pos; i < s.size(); ++i) {
+        char c = s[i];
+        if (in_str) {
+            if (c == '"' && prev != '\\') in_str = false;
+        } else {
+            if      (c == '"')               in_str = true;
+            else if (c == '[' || c == '{')   depth++;
+            else if (c == ']' || c == '}') { depth--; if (depth == 0) return s.substr(start, i - start + 1); }
+        }
+        prev = c;
+    }
+    return "[]";
+}
+
+// libcurl write callback
+static size_t curl_write_cb(char* ptr, size_t size, size_t nmemb, std::string* out) {
+    out->append(ptr, size * nmemb);
+    return size * nmemb;
+}
+
+// POST JSON to an HTTPS endpoint with Bearer auth. Returns response body; sets *http_status if non-null.
+static std::string https_post_json(const std::string& url, const std::string& token,
+                                    const std::string& body, long* http_status = nullptr) {
+    CURL* c = curl_easy_init();
+    if (!c) return "";
+    std::string resp;
+    struct curl_slist* hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
+    std::string auth = "Authorization: Bearer " + token;
+    hdrs = curl_slist_append(hdrs, auth.c_str());
+    curl_easy_setopt(c, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(c, CURLOPT_POST, 1L);
+    curl_easy_setopt(c, CURLOPT_POSTFIELDS, body.c_str());
+    curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long)body.size());
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write_cb);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, &resp);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+    CURLcode rc = curl_easy_perform(c);
+    if (http_status) { long code = 0; curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &code); *http_status = code; }
+    curl_slist_free_all(hdrs);
+    curl_easy_cleanup(c);
+    if (rc != CURLE_OK) return "";
+    return resp;
 }
 
 static double json_double_value(const std::string& json, const std::string& key,
@@ -2812,12 +2871,59 @@ static std::string handle_ai_analyze(const HttpRequest& req) {
 }
 
 // =============================================================================
-// POST /api/ai/chat — assistant chat (app help + CFD knowledge)
-// Body: { message }
+// POST /api/ai/chat — assistant chat
+// Body: { messages: [{role,content},...] }  (full history sent by client)
 // =============================================================================
 static std::string handle_ai_chat(const HttpRequest& req) {
+    // ── Real AI via Lovable gateway ────────────────────────────────────────────
+    const char* api_key_env = std::getenv("LOVABLE_API_KEY");
+    if (api_key_env && api_key_env[0] != '\0') {
+        std::string messages_raw = json_array_raw(req.body, "messages");
+        static const char* SYS =
+            "You are the Discreetize in-app AI assistant. Help users with CFD mesh "
+            "processing, STL workflows, running simulations, mesh generation, and "
+            "using the Discreetize tool. Be concise, friendly, and technical when needed.";
+        std::ostringstream gw;
+        gw << "{\"model\":\"google/gemini-3-flash-preview\",\"messages\":["
+           << "{\"role\":\"system\",\"content\":\"" << json_escape(SYS) << "\"}";
+        if (messages_raw.size() > 2)
+            gw << "," << messages_raw.substr(1, messages_raw.size() - 2);
+        gw << "]}";
+        long status = 0;
+        std::string gw_resp = https_post_json(
+            "https://ai.gateway.lovable.dev/v1/chat/completions",
+            api_key_env, gw.str(), &status);
+        if (status == 429) return error_json(429, "Rate limit exceeded. Try again shortly.");
+        if (status == 402) return error_json(402, "AI credits exhausted.");
+        if (!gw_resp.empty()) {
+            // Extract content from choices[0].message.content
+            std::string reply;
+            auto msg_pos = gw_resp.find("\"message\"");
+            if (msg_pos != std::string::npos)
+                reply = json_string_value(gw_resp.substr(msg_pos), "content");
+            if (reply.empty())
+                reply = json_string_value(gw_resp, "content");
+            if (!reply.empty()) {
+                std::ostringstream o;
+                o << "{\"reply\":\"" << json_escape(reply) << "\"}";
+                return ok_json(o.str());
+            }
+        }
+        // Gateway failed — fall through to keyword chat
+    }
+
+    // ── Keyword fallback ───────────────────────────────────────────────────────
+    // Extract last user message for keyword matching
     std::string msg = json_string_value(req.body, "message");
-    if (msg.empty()) return error_json(400, "message required");
+    if (msg.empty()) {
+        // Try to get the last message from the messages array
+        std::string messages_raw = json_array_raw(req.body, "messages");
+        // Find the last "content" value
+        size_t pos = messages_raw.rfind("\"content\"");
+        if (pos != std::string::npos)
+            msg = json_string_value(messages_raw.substr(pos - 1), "content");
+    }
+    if (msg.empty()) return error_json(400, "messages required");
 
     // Lowercase for matching
     std::string ml = msg;
@@ -3364,6 +3470,8 @@ static void handle_client(int client_fd) {
 // =============================================================================
 
 int main(int argc, char** argv) {
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+
     // Resolve webui path relative to the directory containing the executable
     {
         std::string exe = argv[0];

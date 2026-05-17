@@ -7265,11 +7265,21 @@ window.switchSimTab = function(tab) {
   const inputEl = document.getElementById('ai-chat-input');
   const sendBtn = document.getElementById('ai-chat-send');
   const suggEl  = document.getElementById('ai-suggestions');
+  const history = []; // {role:'user'|'assistant', content:string}[]
+
+  // Basic markdown → HTML (bold, inline code, newlines)
+  function mdToHtml(text) {
+    return text
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/`([^`]+)`/g,'<code>$1</code>')
+      .replace(/\n/g,'<br>');
+  }
 
   function appendMsg(role, text) {
     const div = document.createElement('div');
     div.className = 'ai-msg ai-msg-' + role;
-    div.innerHTML = `<div class="ai-msg-text">${text}</div>`;
+    div.innerHTML = `<div class="ai-msg-text">${role === 'bot' ? mdToHtml(text) : text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`;
     msgsEl.appendChild(div);
     msgsEl.scrollTop = msgsEl.scrollHeight;
     return div;
@@ -7291,20 +7301,23 @@ window.switchSimTab = function(tab) {
     if (!msg) return;
     inputEl.value = '';
     suggEl.innerHTML = '';
+    history.push({ role: 'user', content: msg });
     appendMsg('user', msg);
     const typing = appendMsg('bot', '…');
     typing.classList.add('ai-msg-typing');
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg }),
+        body: JSON.stringify({ messages: history }),
       });
       typing.remove();
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
-      appendMsg('bot', d.reply.replace(/\n/g, '<br>'));
-      showSuggs(d.suggestions);
+      history.push({ role: 'assistant', content: d.reply });
+      appendMsg('bot', d.reply);
+      if (d.suggestions) showSuggs(d.suggestions);
     } catch (err) {
+      history.pop();
       typing.remove();
       appendMsg('bot', 'Error: ' + err.message);
     }

@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y \
-    g++ curl ca-certificates \
+    g++ curl ca-certificates libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,7 +26,7 @@ RUN c++ -std=c++20 -O2 -I. \
     shaders/node_compiler.cpp \
     render/software_renderer.cpp \
     server/server.cpp \
-    -o cfd_server -lpthread
+    -o cfd_server -lpthread -lcurl
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y curl ca-certificates && rm -rf /var/lib/apt/lists/*
