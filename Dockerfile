@@ -20,6 +20,11 @@ RUN c++ -std=c++20 -O2 -I. \
     export/mesh_exporter.cpp \
     supabase/supabase_client.cpp \
     cfd/cfd_engine.cpp \
+    cfd/flow3d.cpp \
+    cfd/lbm_sim.cpp \
+    shaders/shader_library.cpp \
+    shaders/node_compiler.cpp \
+    render/software_renderer.cpp \
     server/server.cpp \
     -o cfd_server -lpthread
 
