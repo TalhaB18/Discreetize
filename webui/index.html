@@ -3414,20 +3414,24 @@ function renderMesh(data) {
     fGeo.setIndex(new THREE.BufferAttribute(idx, 1));
     fGeo.computeVertexNormals();
 
-    fillM = new THREE.Mesh(fGeo, new THREE.MeshLambertMaterial({
-      color: modelColor(), transparent: true, opacity: P.fillOp,
-      side: THREE.DoubleSide, depthWrite: false,
+    fillM = new THREE.Mesh(fGeo, new THREE.MeshPhongMaterial({
+      color: 0x5b8fa8,   // CFD blue-grey
+      specular: 0x223344,
+      shininess: 18,
+      flatShading: true,  // distinct triangles — classic mesh look
+      side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     }));
-    fillM._baseOpacity = P.fillOp;
+    fillM._baseOpacity = 1.0;
 
     // Compute face groups so face-select highlights whole faces, not single triangles
     const fgd = computeFaceGroupsForGeo(fGeo);
     if (fgd) { fillM._faceGroups = fgd.groups; fillM._triToGroup = fgd.groupOf; }
 
-    // Independent EdgesGeometry — NOT wireframe: material flag, a separate object
-    const eGeo = new THREE.EdgesGeometry(fGeo, 15);
+    // Show all mesh edges (threshold 1° ≈ all edges) in dark navy
+    const eGeo = new THREE.EdgesGeometry(fGeo, 1);
     edgeM = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({
-      color: 0xa78bfa, transparent: true, opacity: P.edgeOp,
+      color: 0x0d1b2a,
     }));
 
     surfGrp.add(fillM, edgeM);
@@ -3460,7 +3464,7 @@ function renderMesh(data) {
       color: 0xfbbf24, transparent: true, opacity: P.blOp,
     })));
   }
-  blG.visible = false;
+  blG.visible = true;   // show BL prism edges by default
   scene.add(blG);
 
   // Fit to full CFD domain
