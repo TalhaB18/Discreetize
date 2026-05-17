@@ -266,6 +266,87 @@ body.light #vp-bar { background: rgba(221,216,245,0.92); }
   cursor: pointer;
 }
 .vp-mode-btn:hover { background: var(--accent-glow); border-color: var(--accent); }
+.vp-mode-btn.mode-object  { border-left: 2px solid #f0a030; }
+.vp-mode-btn.mode-edit    { border-left: 2px solid #4a9eff; }
+.vp-mode-btn.mode-cfd     { border-left: 2px solid #00c8a0; }
+.vp-mode-btn.mode-analysis{ border-left: 2px solid #9b59b6; }
+
+#mode-selector { position: relative; }
+#mode-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  z-index: 9999;
+  min-width: 188px;
+  padding: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.6);
+}
+#mode-dropdown.hidden { display: none; }
+.mode-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.1s;
+}
+.mode-dd-item:hover:not(.disabled) { background: var(--panel3); }
+.mode-dd-item.active { background: var(--accent-glow); }
+.mode-dd-item.disabled { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+.mode-dd-sep { height: 1px; background: var(--border2); margin: 3px 0; }
+.mode-icon {
+  width: 24px; height: 24px;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.mode-icon.orange { background: rgba(240,160,48,.18); color: #f0a030; }
+.mode-icon.blue   { background: rgba(74,158,255,.18); color: #4a9eff; }
+.mode-icon.green  { background: rgba(0,200,160,.18); color: #00c8a0; }
+.mode-icon.purple { background: rgba(155,89,182,.18); color: #9b59b6; }
+.mode-icon.gray   { background: rgba(120,120,130,.12); color: #888; }
+.mode-item-info { flex: 1; }
+.mode-item-desc { font-size: 9px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.mode-dd-key {
+  font-size: 9px;
+  color: var(--muted);
+  background: var(--panel3);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-family: monospace;
+  letter-spacing: .5px;
+}
+.mode-dd-key.soon { color: var(--warn); border-color: var(--warn); background: transparent; }
+#mode-dot-btn {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #f0a030;
+  flex-shrink: 0;
+}
+.vp-mode-hint {
+  position: absolute;
+  bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 10px; color: var(--muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+  z-index: 50;
+  white-space: nowrap;
+}
+.vp-mode-hint.show { opacity: 1; }
 
 .vp-bar-btn {
   display: flex;
@@ -1489,7 +1570,57 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
   <div id="vp">
     <!-- VP Header Bar -->
     <div id="vp-bar">
-      <div class="vp-mode-btn">Object Mode ▾</div>
+      <div id="mode-selector">
+        <button id="vp-mode-btn" class="vp-mode-btn mode-object">
+          <span id="mode-dot-btn"></span>
+          <span id="mode-label">Object Mode</span>
+          <span style="opacity:.6;margin-left:2px">▾</span>
+        </button>
+        <div id="mode-dropdown" class="hidden">
+          <div class="mode-dd-item active" data-mode="object">
+            <div class="mode-icon orange">◉</div>
+            <div class="mode-item-info">
+              <div>Object Mode</div>
+              <div class="mode-item-desc">Select &amp; transform objects</div>
+            </div>
+            <span class="mode-dd-key">Tab</span>
+          </div>
+          <div class="mode-dd-item" data-mode="edit">
+            <div class="mode-icon blue">✦</div>
+            <div class="mode-item-info">
+              <div>Edit Mode</div>
+              <div class="mode-item-desc">Face / edge / vertex selection</div>
+            </div>
+            <span class="mode-dd-key">Tab</span>
+          </div>
+          <div class="mode-dd-sep"></div>
+          <div class="mode-dd-item" data-mode="cfd">
+            <div class="mode-icon green">⬡</div>
+            <div class="mode-item-info">
+              <div>CFD Mode</div>
+              <div class="mode-item-desc">Mesh &amp; flow parameters</div>
+            </div>
+            <span class="mode-dd-key">C</span>
+          </div>
+          <div class="mode-dd-item" data-mode="analysis">
+            <div class="mode-icon purple">◈</div>
+            <div class="mode-item-info">
+              <div>Analysis Mode</div>
+              <div class="mode-item-desc">Curvature &amp; quality map</div>
+            </div>
+            <span class="mode-dd-key">A</span>
+          </div>
+          <div class="mode-dd-sep"></div>
+          <div class="mode-dd-item disabled" data-mode="sculpt">
+            <div class="mode-icon gray">⬠</div>
+            <div class="mode-item-info">
+              <div>Sculpt Mode</div>
+              <div class="mode-item-desc">Surface sculpting tools</div>
+            </div>
+            <span class="mode-dd-key soon">Soon</span>
+          </div>
+        </div>
+      </div>
       <div class="vp-bar-sep"></div>
       <button class="vp-bar-btn" id="vpm-view">View</button>
       <button class="vp-bar-btn" id="vpm-select">Select</button>
@@ -1521,6 +1652,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
     </div>
 
     <canvas id="c"></canvas>
+    <div id="vp-mode-hint" class="vp-mode-hint"></div>
 
     <!-- Shading Bar -->
     <div id="vp-shading-bar">
@@ -6525,6 +6657,157 @@ document.getElementById('btn-open-sim')?.addEventListener('click', () => {
   document.getElementById('set-show-fps').addEventListener('change', function() {
     if (this.checked) { fpsFrames=0; fpsLast=performance.now(); requestAnimationFrame(updateFPS); }
   });
+
+})();
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// VIEWPORT MODE SELECTOR
+// ═══════════════════════════════════════════════════
+(function() {
+  const btn      = document.getElementById('vp-mode-btn');
+  const dropdown = document.getElementById('mode-dropdown');
+  const dotEl    = document.getElementById('mode-dot-btn');
+  const labelEl  = document.getElementById('mode-label');
+  const hintEl   = document.getElementById('vp-mode-hint');
+
+  let currentMode = 'object';
+  let hintTimer   = null;
+
+  const MODES = {
+    object: {
+      label: 'Object Mode',
+      dotColor: '#f0a030',
+      cls: 'mode-object',
+      hint: 'Tab — Edit Mode  |  G Grab  |  R Rotate  |  S Scale  |  Del Delete',
+      tab: null,
+    },
+    edit: {
+      label: 'Edit Mode',
+      dotColor: '#4a9eff',
+      cls: 'mode-edit',
+      hint: '1 Vert  |  2 Edge  |  3 Face  |  Tab — Object Mode  |  Esc Deselect',
+      tab: 'scene',
+    },
+    cfd: {
+      label: 'CFD Mode',
+      dotColor: '#00c8a0',
+      cls: 'mode-cfd',
+      hint: 'Configure mesh resolution, boundary layers, and run CFD simulation',
+      tab: 'mesh',
+    },
+    analysis: {
+      label: 'Analysis Mode',
+      dotColor: '#9b59b6',
+      cls: 'mode-analysis',
+      hint: 'View curvature map, mesh quality, and surface analysis',
+      tab: 'tool',
+    },
+  };
+
+  function switchTab(tabId) {
+    if (!tabId) return;
+    document.body.classList.add('rp-open');
+    document.querySelectorAll('.rp-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.rp-tab-pane').forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-' + tabId);
+    });
+  }
+
+  function showHint(text) {
+    clearTimeout(hintTimer);
+    hintEl.textContent = text;
+    hintEl.classList.add('show');
+    hintTimer = setTimeout(() => hintEl.classList.remove('show'), 3000);
+  }
+
+  function applyMode(mode) {
+    const def = MODES[mode];
+    if (!def) return;
+    currentMode = mode;
+
+    // Update button appearance
+    btn.className = 'vp-mode-btn ' + def.cls;
+    dotEl.style.background = def.dotColor;
+    labelEl.textContent = def.label;
+
+    // Update dropdown active state
+    document.querySelectorAll('.mode-dd-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.mode === mode);
+    });
+
+    // Switch right panel tab if relevant
+    if (def.tab) switchTab(def.tab);
+
+    // Apply selection behavior
+    if (mode === 'object') {
+      if (typeof setMode === 'function') setMode('none');
+    } else if (mode === 'edit') {
+      if (typeof setMode === 'function') setMode('face');
+    } else if (mode === 'cfd') {
+      if (typeof setMode === 'function') setMode('none');
+    } else if (mode === 'analysis') {
+      if (typeof setMode === 'function') setMode('none');
+      // Trigger curvature heatmap if available
+      const curvBtn = document.getElementById('btn-curvature') || document.querySelector('[data-action="curvature"]');
+      if (curvBtn) curvBtn.click();
+    }
+
+    // Show mode hint in viewport
+    showHint(def.hint);
+    closeDropdown();
+  }
+
+  function openDropdown() {
+    dropdown.classList.remove('hidden');
+    btn.classList.add('open');
+  }
+
+  function closeDropdown() {
+    dropdown.classList.add('hidden');
+    btn.classList.remove('open');
+  }
+
+  // Toggle dropdown on button click
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.classList.contains('hidden') ? openDropdown() : closeDropdown();
+  });
+
+  // Click a mode item
+  dropdown.addEventListener('click', (e) => {
+    const item = e.target.closest('.mode-dd-item');
+    if (!item || item.classList.contains('disabled')) return;
+    applyMode(item.dataset.mode);
+  });
+
+  // Click outside closes dropdown
+  document.addEventListener('click', () => closeDropdown());
+
+  // Tab key toggles Object ↔ Edit
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      applyMode(currentMode === 'edit' ? 'object' : 'edit');
+    } else if (e.key === 'c' || e.key === 'C') {
+      // Only switch to CFD if no other modifier
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        applyMode('cfd');
+      }
+    } else if (e.key === 'a' || e.key === 'A') {
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        applyMode('analysis');
+      }
+    }
+  });
+
+  // Expose so other code can call switchMode('edit') etc.
+  window.switchViewportMode = applyMode;
+  window.getViewportMode    = () => currentMode;
 
 })();
 </script>
