@@ -825,8 +825,28 @@ static std::string handle_mesh_data(const std::string& mesh_id) {
 
     // --- surface_triangles ---
     // Faces that appear in exactly one tet are on the surface boundary.
+    // We skip domain outer-wall faces: a face is a domain wall if all three
+    // vertices lie on the same axis-aligned plane at domain_lo[k] or domain_hi[k].
     int total_surface_tris = 0;
     {
+        const double* dlo = vol.domain_lo;
+        const double* dhi = vol.domain_hi;
+        const double  tol = 1e-6;
+
+        auto on_wall = [&](const Face3& f) -> bool {
+            for (int k = 0; k < 3; ++k) {
+                auto chk = [&](double bound) {
+                    for (int i = 0; i < 3; ++i) {
+                        double v = vol.vertices[f[i]].pos[k];
+                        if (std::fabs(v - bound) > tol) return false;
+                    }
+                    return true;
+                };
+                if (chk(dlo[k]) || chk(dhi[k])) return true;
+            }
+            return false;
+        };
+
         std::map<Face3, int> face_count;
         for (const auto& tet : vol.tets)
             for (const auto& f : tet_faces(tet))
@@ -837,6 +857,7 @@ static std::string handle_mesh_data(const std::string& mesh_id) {
         int  emitted = 0;
         for (const auto& kv : face_count) {
             if (kv.second != 1) continue;
+            if (on_wall(kv.first)) continue;  // skip outer domain walls
             ++total_surface_tris;
             if (emitted < 20000) {
                 const Face3& f = kv.first;

@@ -963,6 +963,12 @@ VolumeMesh MeshEngine::generateTetCore(const PrismMesh& bl_mesh,
         }
     }
 
+    // Store padded domain bounds so callers can filter out outer-wall faces.
+    for (int k = 0; k < 3; ++k) {
+        vol.domain_lo[k] = lo[k];
+        vol.domain_hi[k] = hi[k];
+    }
+
     notify("Tet core: complete", 1.0);
     std::fprintf(stderr,
         "VolumeMesh: %zu tets, %zu prisms, %zu vertices\n",

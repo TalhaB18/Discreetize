@@ -52,6 +52,10 @@ struct VolumeMesh {
     std::vector<TetElement>   tets;
     std::vector<PrismElement> prisms;   // boundary layer prisms (copied from PrismMesh)
     std::vector<BoundaryPatch> patches; // inherited from surface + updated node ids
+    // Outer domain bounding box used by generateTetCore (set after construction).
+    // Faces whose vertices all lie on any face of this box are domain walls.
+    double domain_lo[3] = {0,0,0};
+    double domain_hi[3] = {0,0,0};
 };
 
 // ---------------------------------------------------------------------------
