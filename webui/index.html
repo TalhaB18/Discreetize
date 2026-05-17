@@ -3,7 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CFD Mesh</title>
+<title>Discreetize — CFD Mesh</title>
+<!-- Auth guard: redirect to landing if not signed in -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(async function() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
+      const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { window.location.replace('/'); return; }
+      // Expose for sign-out button
+      window._sb = sb;
+    }
+  } catch(e) { /* no auth configured — allow access */ }
+})();
+</script>
 <style>
 :root {
   --bg: #19171f;
@@ -1434,7 +1450,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
       <line x1="3.27" y1="6.96" x2="12" y2="12.01"/><line x1="12" y1="22.08" x2="12" y2="12"/>
       <line x1="20.73" y1="6.96" x2="12" y2="12.01"/>
     </svg>
-    <span class="tb-logo-text">CFD Mesh</span>
+    <span class="tb-logo-text">Discreetize</span>
   </div>
 
   <div class="tb-menu">
@@ -1484,6 +1500,10 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
       </svg>
+    </button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="tb-signout" title="Sign out" style="color:var(--muted)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     </button>
   </div>
 </div>
@@ -4824,6 +4844,15 @@ document.getElementById('tb-reset').addEventListener('click', () => {
 document.getElementById('tb-fit').addEventListener('click', () => {
   document.getElementById('vc-fit').click();
 });
+document.getElementById('tb-signout').addEventListener('click', async () => {
+  if (window._sb) {
+    await window._sb.auth.signOut();
+    window.location.replace('/');
+  } else {
+    window.location.replace('/');
+  }
+});
+
 document.getElementById('tb-wire').addEventListener('click', () => {
   document.getElementById('b-wf').click();
 });

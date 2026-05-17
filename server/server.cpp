@@ -1358,13 +1358,23 @@ static std::string handle_static(const std::string& req_path) {
     std::string rel = strip_query(req_path);
     if (!rel.empty() && rel.front() == '/') rel = rel.substr(1);
 
-    std::string file_path = rel.empty() ? (WEBUI_ROOT + "/index.html")
-                                        : (WEBUI_ROOT + "/" + rel);
+    // Root → landing page; /app → CFD app
+    std::string file_path;
+    if (rel.empty() || rel == "index.html") {
+        file_path = WEBUI_ROOT + "/landing.html";
+    } else if (rel == "app" || rel == "app/") {
+        file_path = WEBUI_ROOT + "/index.html";
+    } else {
+        file_path = WEBUI_ROOT + "/" + rel;
+    }
 
     struct stat st{};
     if (stat(file_path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
-        // Fall back to SPA entry point
-        file_path = WEBUI_ROOT + "/index.html";
+        // Fall back: unknown paths go to landing, /app/* go to CFD app
+        if (rel.rfind("app", 0) == 0)
+            file_path = WEBUI_ROOT + "/index.html";
+        else
+            file_path = WEBUI_ROOT + "/landing.html";
     }
 
     return serve_file(file_path, mime_for(file_path));
@@ -2704,6 +2714,18 @@ static std::string dispatch(const HttpRequest& req) {
     // CORS preflight
     if (method == "OPTIONS")
         return http_response(204, "No Content", "text/plain", "");
+
+    // Public config (Supabase URL + anon key for the frontend)
+    if (method == "GET" && route == "/api/config") {
+        const char* su = std::getenv("SUPABASE_URL");
+        const char* ak = std::getenv("SUPABASE_ANON_KEY");
+        std::string body = "{\"supabaseUrl\":\"";
+        body += su ? json_escape(su) : "";
+        body += "\",\"supabaseAnonKey\":\"";
+        body += ak ? json_escape(ak) : "";
+        body += "\"}";
+        return ok_json(body);
+    }
 
     // Static files / SPA fallback
     if (method == "GET")
