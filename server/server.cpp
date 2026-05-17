@@ -5,7 +5,6 @@
 //       server/server.cpp -o cfd_server -lpthread
 // =============================================================================
 
-#include <curl/curl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -489,37 +488,49 @@ static std::string json_array_raw(const std::string& s, const std::string& key) 
     return "[]";
 }
 
-// libcurl write callback
-static size_t curl_write_cb(char* ptr, size_t size, size_t nmemb, std::string* out) {
-    out->append(ptr, size * nmemb);
-    return size * nmemb;
-}
-
-// POST JSON to an HTTPS endpoint with Bearer auth. Returns response body; sets *http_status if non-null.
+// POST JSON via curl subprocess — no linking dependency, curl is in the Docker image.
+// Body is written to a temp file to avoid shell injection.
 static std::string https_post_json(const std::string& url, const std::string& token,
                                     const std::string& body, long* http_status = nullptr) {
-    CURL* c = curl_easy_init();
-    if (!c) return "";
-    std::string resp;
-    struct curl_slist* hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
-    std::string auth = "Authorization: Bearer " + token;
-    hdrs = curl_slist_append(hdrs, auth.c_str());
-    curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(c, CURLOPT_POST, 1L);
-    curl_easy_setopt(c, CURLOPT_POSTFIELDS, body.c_str());
-    curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, (long)body.size());
-    curl_easy_setopt(c, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, curl_write_cb);
-    curl_easy_setopt(c, CURLOPT_WRITEDATA, &resp);
-    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
-    CURLcode rc = curl_easy_perform(c);
-    if (http_status) { long code = 0; curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &code); *http_status = code; }
-    curl_slist_free_all(hdrs);
-    curl_easy_cleanup(c);
-    if (rc != CURLE_OK) return "";
-    return resp;
+    // Write body to temp file
+    char tmp[] = "/tmp/ai_XXXXXX";
+    int fd = mkstemp(tmp);
+    if (fd < 0) return "";
+    (void)write(fd, body.c_str(), body.size());
+    close(fd);
+
+    // Build command — token comes from env var so safe; body via file
+    std::string cmd =
+        "curl -sS -w '\n%{http_code}' "
+        "-X POST "
+        "-H 'Content-Type: application/json' "
+        "-H 'Authorization: Bearer " + token + "' "
+        "-d @" + std::string(tmp) + " "
+        "--max-time 30 "
+        "'" + url + "' 2>/tmp/ai_err";
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) { unlink(tmp); return ""; }
+
+    std::string result;
+    char buf[8192];
+    while (fgets(buf, sizeof(buf), pipe))
+        result += buf;
+    pclose(pipe);
+    unlink(tmp);
+
+    // Last line is the HTTP status code written by -w '\n%{http_code}'
+    auto last_nl = result.rfind('\n');
+    if (last_nl != std::string::npos) {
+        if (http_status) {
+            try { *http_status = std::stol(result.substr(last_nl + 1)); } catch (...) {}
+        }
+        // Trim trailing newline from body
+        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+            result.pop_back();
+        if (last_nl > 0) result = result.substr(0, last_nl);
+    }
+    return result;
 }
 
 static double json_double_value(const std::string& json, const std::string& key,
@@ -2908,8 +2919,15 @@ static std::string handle_ai_chat(const HttpRequest& req) {
                 o << "{\"reply\":\"" << json_escape(reply) << "\"}";
                 return ok_json(o.str());
             }
+            // Key was set, request went out, but parsing failed — surface raw response
+            std::ostringstream o;
+            o << "{\"reply\":\"AI error: " << json_escape(gw_resp.substr(0, 300)) << "\"}";
+            return ok_json(o.str());
         }
-        // Gateway failed — fall through to keyword chat
+        // curl failed entirely
+        std::ostringstream o;
+        o << "{\"reply\":\"AI request failed (network error). Check server logs.\"}";
+        return ok_json(o.str());
     }
 
     // ── Keyword fallback ───────────────────────────────────────────────────────
@@ -3470,8 +3488,6 @@ static void handle_client(int client_fd) {
 // =============================================================================
 
 int main(int argc, char** argv) {
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-
     // Resolve webui path relative to the directory containing the executable
     {
         std::string exe = argv[0];

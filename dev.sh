@@ -35,7 +35,7 @@ BUILD_CMD=(
     shaders/node_compiler.cpp
     render/software_renderer.cpp
     server/server.cpp
-    -o cfd_server -lpthread -lcurl
+    -o cfd_server -lpthread
 )
 
 build() {
