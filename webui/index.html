@@ -3035,6 +3035,10 @@ window._camera = camera;
 window._amb = amb;
 window._sun = sun;
 window._grid = grid;
+window._gridState = { size: gridSize, divs: gridDivs };
+// Allow external scripts to replace the grid and keep the module's local ref in sync
+window._setGrid = (g) => { grid = g; window._grid = g; };
+window._setIsLight = (v) => { isLight = v; };
 
 // ─── Controls ────────────────────────────────────────────────
 const orbit = new OrbitControls(camera, canvas);
@@ -3269,6 +3273,7 @@ themeBtn.addEventListener('click', () => {
   grid.position.copy(gridPos);
   grid.visible = gridVis;
   scene.add(grid);
+  window._grid = grid;
 
   // Update every loaded STL fill mesh to contrast with the new background
   const col = modelColor();
@@ -3307,6 +3312,7 @@ function fitCamera(box) {
   scene.remove(grid);
   gridSize = Math.max(d * 3, 2);
   gridDivs = Math.max(Math.min(Math.floor(gridSize / Math.max(d * 0.06, 0.01)), 80), 8);
+  if (window._gridState) { window._gridState.size = gridSize; window._gridState.divs = gridDivs; }
   grid = new THREE.GridHelper(gridSize, gridDivs, ...gridColors());
   grid.position.set(c.x, box.min.y, c.z);
   scene.add(grid);
@@ -3406,19 +3412,54 @@ function renderMesh(data) {
   // Surface fill + EdgesGeometry wireframe
   const surfGrp = new THREE.Group();
   if (data.surface_triangles?.length) {
-    const pos = new Float32Array(pts.flat());
-    const idx = new Uint32Array(data.surface_triangles.flat());
+    // ── Build non-indexed geometry with per-face quality colouring ─────────────
+    // Each triangle gets its own 3 vertices so flat-shading + vertex colours work.
+    // Colour is mapped from equilateral skewness: 0 = equilateral (teal) → 1 = degenerate (red)
+    const d3 = (a, b) => {
+      const dx = pts[b][0]-pts[a][0], dy = pts[b][1]-pts[a][1], dz = pts[b][2]-pts[a][2];
+      return Math.sqrt(dx*dx + dy*dy + dz*dz);
+    };
+    // JET-like colormap: blue→cyan→green→yellow→red
+    const jet = t => {
+      t = Math.max(0, Math.min(1, t));
+      if (t < 0.25) return [0,       t*4,     1      ];
+      if (t < 0.5)  return [0,       1,       1-(t-0.25)*4];
+      if (t < 0.75) return [(t-0.5)*4, 1,     0      ];
+                    return [1,       1-(t-0.75)*4, 0  ];
+    };
+
+    const tris = data.surface_triangles;
+    const posArr = new Float32Array(tris.length * 9);
+    const colArr = new Float32Array(tris.length * 9);
+
+    for (let i = 0; i < tris.length; i++) {
+      const [ai, bi, ci] = tris[i];
+      const pa = pts[ai], pb = pts[bi], pc = pts[ci];
+      const ab = d3(ai,bi), bc = d3(bi,ci), ca = d3(ci,ai);
+      const ideal = (ab+bc+ca)/3;
+      const skew  = Math.max(Math.abs(ab-ideal), Math.abs(bc-ideal), Math.abs(ca-ideal)) / (ideal+1e-12);
+      const t = Math.min(skew * 2.5, 1); // scale so typical meshes show range
+      const [r,g,b] = jet(t);
+      const base = i * 9;
+      posArr[base]   = pa[0]; posArr[base+1] = pa[1]; posArr[base+2] = pa[2];
+      posArr[base+3] = pb[0]; posArr[base+4] = pb[1]; posArr[base+5] = pb[2];
+      posArr[base+6] = pc[0]; posArr[base+7] = pc[1]; posArr[base+8] = pc[2];
+      for (let v = 0; v < 3; v++) {
+        colArr[base + v*3]   = r;
+        colArr[base + v*3+1] = g;
+        colArr[base + v*3+2] = b;
+      }
+    }
 
     const fGeo = new THREE.BufferGeometry();
-    fGeo.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
-    fGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+    fGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    fGeo.setAttribute('color',    new THREE.BufferAttribute(colArr, 3));
     fGeo.computeVertexNormals();
 
     fillM = new THREE.Mesh(fGeo, new THREE.MeshPhongMaterial({
-      color: 0x5b8fa8,   // CFD blue-grey
-      specular: 0x223344,
-      shininess: 18,
-      flatShading: true,  // distinct triangles — classic mesh look
+      vertexColors: true,
+      flatShading: true,
+      shininess: 12,
       side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
     }));
@@ -3428,11 +3469,9 @@ function renderMesh(data) {
     const fgd = computeFaceGroupsForGeo(fGeo);
     if (fgd) { fillM._faceGroups = fgd.groups; fillM._triToGroup = fgd.groupOf; }
 
-    // Show all mesh edges (threshold 1° ≈ all edges) in dark navy
+    // Dark edges overlaid on top — shows every triangle boundary
     const eGeo = new THREE.EdgesGeometry(fGeo, 1);
-    edgeM = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({
-      color: 0x0d1b2a,
-    }));
+    edgeM = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({ color: 0x0a1520 }));
 
     surfGrp.add(fillM, edgeM);
     pickable.push(fillM);
@@ -7009,14 +7048,38 @@ window.switchSimTab = function(tab) {
     const root = document.documentElement;
     Object.entries(t).forEach(([k, v]) => { if (k !== 'light') root.style.setProperty(k, v); });
     document.body.classList.toggle('light', !!t.light);
+    // Sync isLight so the toolbar toggle button stays consistent
+    window._setIsLight?.(!!t.light);
     currentTheme = name;
     document.querySelectorAll('.theme-swatch').forEach(b => b.classList.toggle('active', b.dataset.theme === name));
+    // Sync toolbar theme-btn icon
+    const themeBtn = document.getElementById('theme-btn');
+    if (themeBtn) {
+      themeBtn.innerHTML = t.light
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    }
     // Update renderer clear color to match new bg
     const bgHex = parseInt(t['--bg'].replace('#',''), 16);
     window._renderer?.setClearColor(bgHex);
-    // Update grid colors
-    const gridC = t.light ? [0x9ba5b0, 0xc8d0d8] : [0x4a5568, 0x2d3748];
-    if (window._grid) { window._grid.material.color.setHex(gridC[0]); }
+    // Rebuild grid with theme-contrasting colors (border colors are calibrated to contrast with each theme's bg)
+    if (window._grid && window._scene && window.THREE) {
+      const c1 = parseInt(t['--border'].replace('#',''), 16);
+      const c2 = parseInt(t['--border2'].replace('#',''), 16);
+      const gs = window._gridState || { size: 10, divs: 30 };
+      const pos = window._grid.position.clone();
+      const vis = window._grid.visible;
+      const opacity = window._grid.material.opacity ?? 0.6;
+      window._scene.remove(window._grid);
+      const newGrid = new window.THREE.GridHelper(gs.size, gs.divs, c1, c2);
+      newGrid.position.copy(pos);
+      newGrid.visible = vis;
+      newGrid.material.transparent = true;
+      newGrid.material.opacity = opacity;
+      newGrid.material.needsUpdate = true;
+      window._scene.add(newGrid);
+      if (window._setGrid) window._setGrid(newGrid); else window._grid = newGrid;
+    }
     // Persist
     try { localStorage.setItem('cfd-theme', name); } catch(e) {}
   }
