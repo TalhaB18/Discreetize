@@ -1793,7 +1793,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
             <div class="bl-sec-body open" id="vis-body">
               <label class="ck-row"><input type="checkbox" id="ck0" checked> Surface Edges</label>
               <label class="ck-row"><input type="checkbox" id="ck1" checked> Surface Fill</label>
-              <label class="ck-row"><input type="checkbox" id="ck2" checked> Volume Mesh</label>
+              <label class="ck-row"><input type="checkbox" id="ck2"> Volume Mesh</label>
               <label class="ck-row"><input type="checkbox" id="ck3" checked> Boundary Layers</label>
               <label class="ck-row"><input type="checkbox" id="ck4"> Original STL</label>
             </div>
@@ -2894,7 +2894,59 @@ orbit.screenSpacePanning = true;
 window._orbit = orbit;
 
 const xform = new TransformControls(camera, canvas);
-xform.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; });
+
+// ─── Undo System ──────────────────────────────────────────────
+const _undoStack = [];
+const _MAX_UNDO  = 60;
+let   _xformSnap = null; // snapshot taken at drag start
+
+function _pushUndo(action) {
+  _undoStack.push(action);
+  if (_undoStack.length > _MAX_UNDO) {
+    const removed = _undoStack.shift();
+    removed.dispose?.();
+  }
+}
+
+function _doUndo() {
+  const action = _undoStack.pop();
+  if (!action) { toast('Nothing to undo'); return; }
+  action.undo();
+}
+
+xform.addEventListener('dragging-changed', e => {
+  orbit.enabled = !e.value;
+  if (e.value && xform.object) {
+    // drag start — snapshot current transform
+    _xformSnap = {
+      obj:   xform.object,
+      pos:   xform.object.position.clone(),
+      rot:   xform.object.rotation.clone(),
+      scale: xform.object.scale.clone(),
+    };
+  } else if (!e.value && _xformSnap) {
+    // drag end — push undo if actually moved
+    const s = _xformSnap;
+    const moved = !s.pos.equals(s.obj.position)
+               || s.rot.x !== s.obj.rotation.x
+               || s.rot.y !== s.obj.rotation.y
+               || s.rot.z !== s.obj.rotation.z
+               || !s.scale.equals(s.obj.scale);
+    if (moved) {
+      const after = { pos: s.obj.position.clone(), rot: s.obj.rotation.clone(), scale: s.obj.scale.clone() };
+      _pushUndo({
+        label: 'transform',
+        undo() {
+          s.obj.position.copy(s.pos);
+          s.obj.rotation.copy(s.rot);
+          s.obj.scale.copy(s.scale);
+          toast('Undo: transform');
+        },
+      });
+    }
+    _xformSnap = null;
+  }
+});
 xform.addEventListener('change', () => { if (sceneCam && xform.object === sceneCam) refreshCamPanel(); });
 scene.add(xform);
 
@@ -3244,6 +3296,7 @@ function renderMesh(data) {
       color: 0x22c55e, transparent: true, opacity: P.volOp,
     })));
   }
+  volG.visible = false; // hidden by default; user can enable via "Volume Mesh" checkbox
   scene.add(volG);
 
   // BL edges
@@ -3353,6 +3406,12 @@ document.getElementById('b-x').addEventListener('click', () => xform.detach());
 // Keyboard
 window.addEventListener('keydown', e => {
   if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  // Ctrl+Z / Cmd+Z — undo
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    _doUndo();
+    return;
+  }
   if ((e.key === 'Delete' || e.key === 'Backspace') && activeFileId) {
     e.preventDefault();
     removeFile(activeFileId);
@@ -4000,10 +4059,28 @@ function removeFile(id) {
   const idx = files.findIndex(f=>f.id===id);
   if (idx===-1) return;
   const f = files[idx];
-  // Remove from pickable list
+
+  // Save entry for undo — remove from scene WITHOUT disposing geometry
+  const savedEntry = { ...f };
+  const savedIdx   = idx;
   pickable = pickable.filter(p => p !== f.fillMesh);
-  disposeGrp(f.stlGroup);
-  files.splice(idx,1);
+  scene.remove(f.stlGroup); // remove from scene but keep geometry alive
+  files.splice(idx, 1);
+
+  _pushUndo({
+    label: 'delete ' + f.filename,
+    undo() {
+      scene.add(savedEntry.stlGroup);
+      if (savedEntry.fillMesh) pickable.push(savedEntry.fillMesh);
+      const insertAt = Math.min(savedIdx, files.length);
+      files.splice(insertAt, 0, savedEntry);
+      activeFileId = savedEntry.id;
+      refreshScenePanel();
+      toast('Undo: restored ' + savedEntry.filename);
+    },
+    dispose() { disposeGrp(savedEntry.stlGroup); },
+  });
+
   fetch(`/api/upload/${id}`, {method:'DELETE'}).catch(()=>{});
   if (activeFileId===id) {
     activeFileId = files.length ? files[files.length-1].id : null;
