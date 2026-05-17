@@ -12,9 +12,11 @@
     const cfg = await fetch('/api/config').then(r => r.json());
     if (cfg.supabaseUrl && cfg.supabaseAnonKey) {
       const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      // getSession() automatically exchanges #access_token hash from email confirmation links
       const { data: { session } } = await sb.auth.getSession();
       if (!session) { window.location.replace('/'); return; }
-      // Expose for sign-out button
+      // Clear the hash so the token isn't visible in the URL bar
+      if (window.location.hash.includes('access_token')) history.replaceState(null,'',window.location.pathname);
       window._sb = sb;
     }
   } catch(e) { /* no auth configured — allow access */ }

@@ -469,7 +469,7 @@ window.submitAuth=async function(e){
       window.location.replace('/app');
     } else {
       const name=document.getElementById('f-name').value.trim()||email.split('@')[0];
-      const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{name}}});
+      const {data,error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:window.location.origin+'/app',data:{name}}});
       if(error) throw error;
       if(data.user&&!data.session){
         showAlert('Check your email for a confirmation link.','success');
