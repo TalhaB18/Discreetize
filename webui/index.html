@@ -2867,6 +2867,10 @@ function renderMesh(data) {
     }));
     fillM._baseOpacity = P.fillOp;
 
+    // Compute face groups so face-select highlights whole faces, not single triangles
+    const fgd = computeFaceGroupsForGeo(fGeo);
+    if (fgd) { fillM._faceGroups = fgd.groups; fillM._triToGroup = fgd.groupOf; }
+
     // Independent EdgesGeometry — NOT wireframe: material flag, a separate object
     const eGeo = new THREE.EdgesGeometry(fGeo, 15);
     edgeM = new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({
@@ -2929,6 +2933,16 @@ function renderMesh(data) {
   ].map(([v,l])=>`<div class="sc"><div class="sn">${Number(v).toLocaleString()}</div><div class="sl">${l}</div></div>`).join('');
   document.getElementById('sec-stats').style.display = '';
   document.getElementById('sec-vis').style.display   = '';
+
+  // Default view after generation: show surface + BL edges + original STL, hide raw tet edges
+  document.getElementById('ck1').checked = true;  // surface fill on
+  document.getElementById('ck2').checked = false; // volume tet edges OFF (they look like a rectangle)
+  document.getElementById('ck3').checked = true;  // BL edges on
+  document.getElementById('ck4').checked = true;  // original STL on
+
+  // Switch off wireframe so the mesh surface is visible
+  if (wireframeMode) setWireframe(false);
+
   applyWireframe(fillM, wireframeMode);
   if (edgeM) edgeM.visible = !wireframeMode && document.getElementById('ck0').checked;
   syncVis();
