@@ -2525,6 +2525,272 @@ static std::string handle_sim_streamlines(const HttpRequest& req) {
 }
 
 // =============================================================================
+// POST /api/ai/analyze  — CFD mesh AI advisor
+// Body: { goal, physics, flow_dir:[x,y,z], objects:[{bbox_cx,bbox_cy,bbox_cz,
+//         bbox_sx,bbox_sy,bbox_sz,tri_count,filename},...] }
+// =============================================================================
+
+struct AiObject {
+    double cx, cy, cz;   // bounding box center
+    double sx, sy, sz;   // bounding box size
+    int    tri_count;
+    std::string filename;
+};
+
+// Parse objects array from AI request body
+static std::vector<AiObject> ai_parse_objects(const std::string& body) {
+    std::vector<AiObject> out;
+    size_t arr = body.find("\"objects\"");
+    if (arr == std::string::npos) return out;
+    size_t ob = body.find('[', arr);
+    if (ob == std::string::npos) return out;
+    size_t depth = 0, p = ob;
+    size_t arr_end = ob;
+    for (; p < body.size(); ++p) {
+        if (body[p] == '[') ++depth;
+        else if (body[p] == ']') { if (--depth == 0) { arr_end = p; break; } }
+    }
+    // Scan for { } objects
+    p = ob + 1;
+    while (p < arr_end) {
+        size_t lo = body.find('{', p);
+        if (lo == std::string::npos || lo >= arr_end) break;
+        size_t hi = body.find('}', lo);
+        if (hi == std::string::npos || hi > arr_end) break;
+        std::string obj = body.substr(lo, hi - lo + 1);
+        AiObject o;
+        o.cx        = json_double_value(obj, "bbox_cx", 0);
+        o.cy        = json_double_value(obj, "bbox_cy", 0);
+        o.cz        = json_double_value(obj, "bbox_cz", 0);
+        o.sx        = json_double_value(obj, "bbox_sx", 1);
+        o.sy        = json_double_value(obj, "bbox_sy", 1);
+        o.sz        = json_double_value(obj, "bbox_sz", 1);
+        o.tri_count = json_int_value   (obj, "tri_count", 0);
+        o.filename  = json_string_value(obj, "filename");
+        out.push_back(o);
+        p = hi + 1;
+    }
+    return out;
+}
+
+static std::string handle_ai_analyze(const HttpRequest& req) {
+    std::string goal    = json_string_value(req.body, "goal");
+    std::string physics = json_string_value(req.body, "physics");
+    if (goal.empty())    goal    = "balanced";
+    if (physics.empty()) physics = "aerodynamics";
+
+    std::vector<AiObject> objs = ai_parse_objects(req.body);
+
+    // ── Scene geometry analysis ──────────────────────────────────────────────
+    double scene_min_x=1e18,scene_min_y=1e18,scene_min_z=1e18;
+    double scene_max_x=-1e18,scene_max_y=-1e18,scene_max_z=-1e18;
+    int total_tris = 0;
+
+    for (auto& o : objs) {
+        scene_min_x = std::min(scene_min_x, o.cx - o.sx/2);
+        scene_min_y = std::min(scene_min_y, o.cy - o.sy/2);
+        scene_min_z = std::min(scene_min_z, o.cz - o.sz/2);
+        scene_max_x = std::max(scene_max_x, o.cx + o.sx/2);
+        scene_max_y = std::max(scene_max_y, o.cy + o.sy/2);
+        scene_max_z = std::max(scene_max_z, o.cz + o.sz/2);
+        total_tris += o.tri_count;
+    }
+    if (objs.empty()) {
+        scene_min_x=scene_min_y=scene_min_z=0;
+        scene_max_x=scene_max_y=scene_max_z=1;
+    }
+
+    double sw = scene_max_x - scene_min_x;
+    double sh = scene_max_y - scene_min_y;
+    double sd = scene_max_z - scene_min_z;
+    double char_len = std::max({sw, sh, sd, 1e-9});
+    double min_dim  = std::max(std::min({sw, sh, sd}), 1e-9);
+    double aspect   = char_len / min_dim;
+
+    // ── Feature detection ────────────────────────────────────────────────────
+    // Sharp edges: high triangle density relative to surface area heuristic
+    double surf_area = 0;
+    for (auto& o : objs)
+        surf_area += 2.0*(o.sx*o.sy + o.sy*o.sz + o.sx*o.sz);
+    double tri_density = (surf_area > 1e-9) ? (total_tris / surf_area) : 0;
+    bool has_sharp   = (tri_density > 30.0) || (total_tris > 20000);
+
+    // Symmetry: check if scene height roughly equals scene width
+    double sym_ratio = sw / (sh + 1e-9);
+    bool has_symm    = (sym_ratio > 0.4 && sym_ratio < 2.5) && (objs.size() == 1);
+
+    // Wake: elongated in flow direction (aspect ratio > 1.8)
+    bool has_wake    = (aspect > 1.8);
+
+    // Inlets/outlets: pipe-like geometry (elongated + near-circular cross section)
+    double cross_ratio = sw / (sh + 1e-9);
+    bool has_io      = (physics == "internal_flow") ||
+                       (aspect > 2.5 && cross_ratio > 0.6 && cross_ratio < 1.7);
+
+    bool has_walls   = !objs.empty();
+
+    // ── Compute mesh recommendations ─────────────────────────────────────────
+    // Base element size as fraction of characteristic length
+    double base_frac;
+    if      (goal == "speed")    base_frac = 0.060;
+    else if (goal == "accuracy") base_frac = 0.018;
+    else                          base_frac = 0.035;
+
+    double base_size = char_len * base_frac;
+
+    int bl_layers;
+    double bl_growth, wake_factor, surface_factor;
+    if (goal == "speed") {
+        bl_layers = 5;  bl_growth = 1.3;  wake_factor = 0.25; surface_factor = 0.4;
+    } else if (goal == "accuracy") {
+        bl_layers = 15; bl_growth = 1.15; wake_factor = 0.08; surface_factor = 0.12;
+    } else {
+        bl_layers = 10; bl_growth = 1.2;  wake_factor = 0.15; surface_factor = 0.20;
+    }
+
+    // Physics modifiers
+    std::string turb_model;
+    std::string time_stepping;
+    double conv_target;
+    std::string re_regime;
+
+    if (physics == "aerodynamics") {
+        turb_model    = (goal == "accuracy") ? "Spalart-Allmaras" : "k-omega SST";
+        time_stepping = "steady-state";
+        conv_target   = (goal == "accuracy") ? 1e-6 : 1e-4;
+        re_regime     = "turbulent";
+        if (goal == "accuracy") { bl_layers = std::max(bl_layers, 15); bl_growth = 1.15; }
+    } else if (physics == "internal_flow") {
+        turb_model    = "k-epsilon RNG";
+        time_stepping = "steady-state";
+        conv_target   = 1e-5;
+        re_regime     = "turbulent";
+        bl_layers    += 3;
+    } else if (physics == "heat_transfer") {
+        turb_model    = "k-omega SST";
+        time_stepping = "transient";
+        conv_target   = 1e-6;
+        re_regime     = "laminar-turbulent";
+        bl_layers     = std::max(bl_layers + 5, 15);
+        bl_growth     = std::min(bl_growth, 1.15);
+        surface_factor *= 0.5;
+    } else if (physics == "combustion") {
+        turb_model    = "k-epsilon Realizable";
+        time_stepping = "transient";
+        conv_target   = 1e-5;
+        re_regime     = "reacting";
+        base_size    *= 0.7;
+        bl_layers    += 2;
+    }
+
+    double wake_size    = base_size * wake_factor;
+    double surface_size = base_size * surface_factor;
+
+    // ── Build recommendations list ───────────────────────────────────────────
+    std::vector<std::string> recs, warns;
+
+    if (physics == "aerodynamics") {
+        if (has_wake) {
+            recs.push_back("Extend wake refinement zone 8x chord length downstream of the trailing edge");
+            recs.push_back("Use progressive coarsening in the far-field (3 refinement levels)");
+        }
+        if (has_symm)
+            recs.push_back("Apply symmetry boundary on XZ plane to halve cell count without accuracy loss");
+        if (has_sharp)
+            recs.push_back("Refine leading/trailing edges with surface size reduced to " +
+                           std::to_string((int)(surface_size*1000)/1.0) + " mm — critical for lift/drag accuracy");
+        recs.push_back("Target y+ < 1 at all wall surfaces for wall-resolved turbulence treatment");
+        recs.push_back("Domain should extend 20x chord length in all directions from the object");
+    } else if (physics == "internal_flow") {
+        if (has_io)
+            recs.push_back("Set inlet as velocity inlet, outlet as pressure outlet with zero gauge pressure");
+        recs.push_back("Use structured hex mesh in straight duct sections — reduces numerical diffusion by 40%");
+        recs.push_back("Refine mesh in bends and junctions with a 3x local size reduction");
+        if (has_sharp)
+            recs.push_back("Apply fillets to sharp internal corners; if not possible, add local refinement");
+    } else if (physics == "heat_transfer") {
+        recs.push_back("Resolve thermal boundary layer: first cell height = " +
+                       std::to_string((int)(surface_size*10000)/10.0) + " mm");
+        recs.push_back("Enable conjugate heat transfer if solid conduction is present");
+        recs.push_back("Use second-order upwind scheme for energy equation");
+        if (bl_layers >= 15)
+            recs.push_back("Inflation layers critical — " + std::to_string(bl_layers) +
+                           " layers at growth rate " + std::to_string((int)(bl_growth*100)/100.0));
+    } else if (physics == "combustion") {
+        recs.push_back("Apply very fine mesh in flame zone (local size 0.5x base)");
+        recs.push_back("Use species transport with finite-rate/eddy-dissipation model");
+        recs.push_back("Ensure mesh resolves stoichiometric mixture fraction gradients");
+        warns.push_back("Combustion simulation requires transient solver — steady-state may not converge");
+    }
+
+    // General recommendations
+    if (goal == "accuracy")
+        recs.push_back("Run mesh independence study: coarsen by 1.5x and verify results change < 2%");
+    if (total_tris > 50000)
+        warns.push_back("High source triangle count (" + std::to_string(total_tris) +
+                        ") — consider decimating input STL to improve mesh quality");
+    if (aspect > 5.0)
+        warns.push_back("Extreme aspect ratio (" + std::to_string((int)aspect) +
+                        "x) — ensure domain is long enough to capture full wake");
+
+    // ── Build JSON response ──────────────────────────────────────────────────
+    std::ostringstream o;
+    o << std::fixed;
+
+    o << "{\"features\":{"
+      << "\"sharp_edges\":"    << (has_sharp ? "true" : "false") << ","
+      << "\"inlets_outlets\":" << (has_io    ? "true" : "false") << ","
+      << "\"walls\":"          << (has_walls ? "true" : "false") << ","
+      << "\"symmetry_planes\":" << (has_symm ? "true" : "false") << ","
+      << "\"wake_regions\":"   << (has_wake  ? "true" : "false")
+      << "},";
+
+    o << "\"mesh\":{"
+      << "\"base_size\":"          << base_size         << ","
+      << "\"surface_size\":"       << surface_size      << ","
+      << "\"wake_size\":"          << wake_size         << ","
+      << "\"boundary_layers\":"    << bl_layers         << ","
+      << "\"bl_growth_rate\":"     << bl_growth         << ","
+      << "\"char_length\":"        << char_len          << ","
+      << "\"total_cells_est\":"    << (int)(std::pow(char_len/base_size,3)*0.15)
+      << "},";
+
+    o << "\"solver\":{"
+      << "\"turbulence_model\":\""  << json_escape(turb_model)    << "\","
+      << "\"time_stepping\":\""     << json_escape(time_stepping) << "\","
+      << "\"convergence_target\":"  << conv_target                << ","
+      << "\"reynolds_regime\":\""   << json_escape(re_regime)     << "\""
+      << "},";
+
+    // Recommendations array
+    o << "\"recommendations\":[";
+    for (size_t i = 0; i < recs.size(); ++i) {
+        if (i) o << ",";
+        o << "\"" << json_escape(recs[i]) << "\"";
+    }
+    o << "],";
+
+    // Warnings array
+    o << "\"warnings\":[";
+    for (size_t i = 0; i < warns.size(); ++i) {
+        if (i) o << ",";
+        o << "\"" << json_escape(warns[i]) << "\"";
+    }
+    o << "],";
+
+    // Summary string
+    std::string summary = "Analyzed " + std::to_string(objs.size()) + " object(s), " +
+        std::to_string(total_tris) + " triangles. " +
+        "Goal: " + goal + " · Physics: " + physics + ". " +
+        "Recommended base size: " + std::to_string(base_size).substr(0,6) + " · " +
+        std::to_string(bl_layers) + " boundary layers · " + turb_model;
+    o << "\"summary\":\"" << json_escape(summary) << "\""
+      << "}";
+
+    return ok_json(o.str());
+}
+
+// =============================================================================
 // Request dispatcher
 // =============================================================================
 
@@ -2710,6 +2976,9 @@ static std::string dispatch(const HttpRequest& req) {
     // 3D potential-flow streamlines
     if (method == "POST" && route == "/api/sim/streamlines")
         return handle_sim_streamlines(req);
+
+    if (method == "POST" && route == "/api/ai/analyze")
+        return handle_ai_analyze(req);
 
     // CORS preflight
     if (method == "OPTIONS")

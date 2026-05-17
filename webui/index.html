@@ -1136,6 +1136,39 @@ body.sim-open #timeline-panel { display: none; }
   pointer-events: none;
 }
 
+/* ── AI Advisor panel ── */
+.ai-sec { padding:8px 10px 6px; border-bottom:1px solid var(--border2); }
+.ai-sec-lbl { font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-l);margin-bottom:5px; }
+.ai-radio-grp { display:flex;flex-direction:column;gap:3px; }
+.ai-radio { display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;color:var(--text);padding:2px 4px;border-radius:3px;transition:background .1s; }
+.ai-radio:hover { background:var(--panel3); }
+.ai-radio input { accent-color:var(--accent2);cursor:pointer; }
+.ai-chip { font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--border);color:var(--muted);transition:all .2s; }
+.ai-chip.on  { border-color:var(--accent2);color:var(--accent2);background:rgba(0,200,160,.1); }
+.ai-chip.off { border-color:var(--border2);color:var(--muted2); }
+.ai-act-btn { padding:2px 8px;border:1px solid var(--accent);border-radius:3px;background:transparent;color:var(--accent-l);cursor:pointer;font-size:9px;transition:all .15s; }
+.ai-act-btn:hover { background:var(--accent-glow); }
+.ai-run-btn { margin:8px 10px 0;padding:7px;border:1px solid var(--accent-l);border-radius:4px;background:var(--accent-glow);color:var(--accent-l);cursor:pointer;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s; }
+.ai-run-btn:hover { background:rgba(107,88,204,.28); }
+.ai-run-btn:disabled { opacity:.45;cursor:default; }
+#ai-out { flex:1;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:7px;min-height:80px; }
+.ai-welcome { font-size:10px;color:var(--muted);font-style:italic;line-height:1.5; }
+.ai-card { background:var(--panel2);border:1px solid var(--border2);border-radius:5px;padding:8px 10px;font-size:10px;line-height:1.55;color:var(--text);animation:ai-in .25s ease; }
+.ai-card-head { font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-l);margin-bottom:6px; }
+.ai-card-sub  { font-size:9px;color:var(--muted);margin-bottom:5px; }
+.ai-mesh-grid { display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:5px; }
+.ai-kv { background:var(--panel3);border-radius:3px;padding:4px 6px; }
+.ai-kv .k { font-size:8px;color:var(--muted);margin-bottom:1px; }
+.ai-kv .v { font-size:10px;font-weight:600;color:var(--accent-l); }
+.ai-rec-list { margin:5px 0 0;padding-left:14px; }
+.ai-rec-list li { margin-bottom:3px;font-size:10px; }
+.ai-warn { background:rgba(240,160,48,.07);border:1px solid rgba(240,160,48,.3);border-radius:4px;padding:5px 8px;font-size:9px;color:var(--warn);margin-top:4px; }
+.ai-solver-row { display:flex;justify-content:space-between;font-size:9px;padding:2px 0;border-bottom:1px solid var(--border2); }
+.ai-solver-row:last-child { border:none; }
+.ai-solver-row .k { color:var(--muted); }
+.ai-solver-row .v { color:var(--text);font-weight:600; }
+@keyframes ai-in { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+
 /* ── Sim tab switcher ── */
 #sim-tabs { display:flex; gap:3px; }
 .sim-tab {
@@ -2483,6 +2516,60 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
 
         </div><!-- #tab-settings -->
 
+        <!-- ── AI Advisor Tab ── -->
+        <div id="tab-ai" class="rp-tab-pane">
+          <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+
+            <!-- Goal -->
+            <div class="ai-sec">
+              <div class="ai-sec-lbl">Goal</div>
+              <div class="ai-radio-grp">
+                <label class="ai-radio"><input type="radio" name="ai-goal" value="speed"> Speed</label>
+                <label class="ai-radio"><input type="radio" name="ai-goal" value="balanced" checked> Balanced</label>
+                <label class="ai-radio"><input type="radio" name="ai-goal" value="accuracy"> Accuracy</label>
+              </div>
+            </div>
+
+            <!-- Physics Type -->
+            <div class="ai-sec">
+              <div class="ai-sec-lbl">Physics Type</div>
+              <div class="ai-radio-grp">
+                <label class="ai-radio"><input type="radio" name="ai-physics" value="aerodynamics" checked> Aerodynamics</label>
+                <label class="ai-radio"><input type="radio" name="ai-physics" value="internal_flow"> Internal Flow</label>
+                <label class="ai-radio"><input type="radio" name="ai-physics" value="heat_transfer"> Heat Transfer</label>
+                <label class="ai-radio"><input type="radio" name="ai-physics" value="combustion"> Combustion</label>
+              </div>
+            </div>
+
+            <!-- Auto Detect -->
+            <div class="ai-sec">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <div class="ai-sec-lbl" style="margin:0;">Auto Detect</div>
+                <button class="ai-act-btn" id="ai-detect-btn">⚡ Detect</button>
+              </div>
+              <div id="ai-chips" style="display:flex;flex-wrap:wrap;gap:4px;">
+                <span class="ai-chip off">◇ Sharp Edges</span>
+                <span class="ai-chip off">→ Inlets/Outlets</span>
+                <span class="ai-chip off">▪ Walls</span>
+                <span class="ai-chip off">⟺ Symmetry</span>
+                <span class="ai-chip off">∿ Wake Regions</span>
+              </div>
+            </div>
+
+            <!-- Analyze -->
+            <button class="ai-run-btn" id="ai-analyze-btn">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Analyze with C++ Engine
+            </button>
+
+            <!-- Output -->
+            <div id="ai-out">
+              <div class="ai-welcome">Load an STL, pick goal &amp; physics, then click Analyze.</div>
+            </div>
+
+          </div>
+        </div><!-- #tab-ai -->
+
       </div><!-- #rp-inner -->
 
       <!-- RP Edge Strip -->
@@ -2532,6 +2619,12 @@ input[type=number]::-webkit-outer-spin-button { opacity: 1; }
             <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
           </svg>
           <span class="rp-tab-label">Settings</span>
+        </button>
+        <button class="rp-tab-btn" data-tab="ai" draggable="true" title="AI Advisor" style="color:var(--accent2);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span class="rp-tab-label">AI</span>
         </button>
       </div>
     </div><!-- #right-panel -->
@@ -7189,6 +7282,143 @@ window.switchSimTab = function(tab) {
   window.switchViewportMode = applyMode;
   window.getViewportMode    = () => currentMode;
 
+})();
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// AI ADVISOR — calls /api/ai/analyze (C++ engine)
+// ═══════════════════════════════════════════════════════════════
+(function () {
+  const detectBtn  = document.getElementById('ai-detect-btn');
+  const analyzeBtn = document.getElementById('ai-analyze-btn');
+  const outEl      = document.getElementById('ai-out');
+  const chipsEl    = document.getElementById('ai-chips');
+
+  const CHIP_KEYS  = ['sharp_edges','inlets_outlets','walls','symmetry_planes','wake_regions'];
+  const CHIP_NAMES = ['◇ Sharp Edges','→ Inlets/Outlets','▪ Walls','⟺ Symmetry','∿ Wake Regions'];
+
+  function setChips(features) {
+    const chips = chipsEl.querySelectorAll('.ai-chip');
+    CHIP_KEYS.forEach((k, i) => {
+      chips[i].className = 'ai-chip ' + (features[k] ? 'on' : 'off');
+    });
+  }
+
+  function sceneObjects() {
+    if (!window.files) return [];
+    return files
+      .filter(f => f.stlGroup && f.visible)
+      .map(f => {
+        const box = new THREE.Box3().setFromObject(f.stlGroup);
+        const c = new THREE.Vector3(), s = new THREE.Vector3();
+        box.getCenter(c); box.getSize(s);
+        const geo = f.fillMesh?.geometry;
+        const tri_count = geo
+          ? (geo.index ? geo.index.count : (geo.attributes.position?.count || 0)) / 3
+          : 0;
+        return {
+          file_id:   f.id,
+          filename:  f.filename || '',
+          bbox_cx: c.x, bbox_cy: c.y, bbox_cz: c.z,
+          bbox_sx: s.x, bbox_sy: s.y, bbox_sz: s.z,
+          tri_count: Math.round(tri_count),
+        };
+      });
+  }
+
+  function goalVal()    { return document.querySelector('input[name="ai-goal"]:checked')?.value || 'balanced'; }
+  function physicsVal() { return document.querySelector('input[name="ai-physics"]:checked')?.value || 'aerodynamics'; }
+
+  // Quick client-side detect (instant feedback before server call)
+  detectBtn?.addEventListener('click', () => {
+    const objs = sceneObjects();
+    if (!objs.length) { toast('Load a scene object first'); return; }
+    const features = {
+      sharp_edges:    objs.some(o => (o.tri_count / (2*(o.bbox_sx*o.bbox_sy+o.bbox_sy*o.bbox_sz+o.bbox_sx*o.bbox_sz)+1e-9)) > 25),
+      inlets_outlets: physicsVal() === 'internal_flow',
+      walls:          true,
+      symmetry_planes: objs.length === 1 && (() => { const r = objs[0].bbox_sx/(objs[0].bbox_sy+1e-9); return r>0.4&&r<2.5; })(),
+      wake_regions:   objs.some(o => Math.max(o.bbox_sx,o.bbox_sy,o.bbox_sz) / (Math.min(o.bbox_sx,o.bbox_sy,o.bbox_sz)+1e-9) > 1.8),
+    };
+    setChips(features);
+  });
+
+  analyzeBtn?.addEventListener('click', async () => {
+    const objs = sceneObjects();
+    if (!objs.length) { toast('Load a scene object first'); return; }
+
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '⏳ Analyzing…';
+    outEl.innerHTML = '';
+
+    try {
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goalVal(), physics: physicsVal(), objects: objs }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const d = await res.json();
+
+      // Sync chips with server detection
+      if (d.features) setChips(d.features);
+
+      // ── Mesh settings card ──
+      if (d.mesh) {
+        const m = d.mesh;
+        const fmt = v => typeof v === 'number' ? (v < 0.01 ? v.toExponential(2) : v.toFixed(4)) : v;
+        outEl.insertAdjacentHTML('beforeend', `
+          <div class="ai-card">
+            <div class="ai-card-head">Mesh Settings</div>
+            <div class="ai-mesh-grid">
+              <div class="ai-kv"><div class="k">Base Size</div><div class="v">${fmt(m.base_size)}</div></div>
+              <div class="ai-kv"><div class="k">Surface Size</div><div class="v">${fmt(m.surface_size)}</div></div>
+              <div class="ai-kv"><div class="k">Wake Size</div><div class="v">${fmt(m.wake_size)}</div></div>
+              <div class="ai-kv"><div class="k">BL Layers</div><div class="v">${m.boundary_layers}</div></div>
+              <div class="ai-kv"><div class="k">BL Growth</div><div class="v">${m.bl_growth_rate?.toFixed(3)}</div></div>
+              <div class="ai-kv"><div class="k">Est. Cells</div><div class="v">${(m.total_cells_est||0).toLocaleString()}</div></div>
+            </div>
+          </div>`);
+      }
+
+      // ── Solver card ──
+      if (d.solver) {
+        const s = d.solver;
+        outEl.insertAdjacentHTML('beforeend', `
+          <div class="ai-card">
+            <div class="ai-card-head">Solver</div>
+            <div class="ai-solver-row"><span class="k">Turbulence</span><span class="v">${s.turbulence_model||'-'}</span></div>
+            <div class="ai-solver-row"><span class="k">Time</span><span class="v">${s.time_stepping||'-'}</span></div>
+            <div class="ai-solver-row"><span class="k">Regime</span><span class="v">${s.reynolds_regime||'-'}</span></div>
+            <div class="ai-solver-row"><span class="k">Convergence</span><span class="v">${s.convergence_target?.toExponential(0)||'-'}</span></div>
+          </div>`);
+      }
+
+      // ── Recommendations card ──
+      if (d.recommendations?.length) {
+        const items = d.recommendations.map(r => `<li>${r}</li>`).join('');
+        outEl.insertAdjacentHTML('beforeend', `
+          <div class="ai-card">
+            <div class="ai-card-head">Recommendations</div>
+            <ul class="ai-rec-list">${items}</ul>
+          </div>`);
+      }
+
+      // ── Warnings ──
+      if (d.warnings?.length) {
+        d.warnings.forEach(w => {
+          outEl.insertAdjacentHTML('beforeend', `<div class="ai-warn">⚠ ${w}</div>`);
+        });
+      }
+
+    } catch (err) {
+      outEl.innerHTML = `<div class="ai-warn">Error: ${err.message}</div>`;
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Analyze with C++ Engine';
+    }
+  });
 })();
 </script>
 </body>
